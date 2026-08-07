@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+:root {
+  --font-sans: 'Sora', sans-serif;
+  --font-display: 'Sora', sans-serif;
+}
+
+body {
+  font-family: 'Sora', var(--font-sans);
+  background-color: #f8fafc; /* Slate-50 Background */
+  color: #0f172a; /* Slate-900 */
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Sora', var(--font-display);
+}
+
+/* Glassmorphism class helper */
+.glass {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 32px 0 rgba(124, 58, 237, 0.03); /* Soft royal purple hue shadow */
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Scrollbar tweaks */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Custom shimmer animation for skeletons */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 2s infinite;
+  content: '';
+}
+
+/* Marquee animation for logo strip and testimonials */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Premium card shadow */
+.shadow-premium {
+  box-shadow: 0 4px 24px -4px rgba(124, 58, 237, 0.08), 0 1px 4px rgba(0,0,0,0.04);
+}
+
+/* Fix native select dropdown option text visibility */
+select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+select.bg-slate-900 option,
+select.bg-slate-950 option,
+.dark select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+/* Base input text visibility rule: allow Tailwind color classes to work */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  color: inherit;
+}
+
+/* Default text color for light inputs / white cards */
+input:not([type="checkbox"]):not([type="radio"]):not(.text-white):not(.text-slate-100):not(.text-slate-200),
+textarea:not(.text-white):not(.text-slate-100):not(.text-slate-200),
+select:not(.text-white):not(.text-slate-100):not(.text-slate-200) {
+  color: #0f172a;
+}
+
+/* Explicit rule for light inputs with light background */
+input.bg-white,
+textarea.bg-white,
+select.bg-white,
+input.bg-slate-50,
+textarea.bg-slate-50,
+select.bg-slate-50 {
+  color: #0f172a !important;
+  background-color: #ffffff;
+}
+
+/* Explicit rule for dark inputs with dark background */
+input.bg-slate-900,
+input.bg-slate-950,
+input.bg-slate-950\/80,
+textarea.bg-slate-900,
+textarea.bg-slate-950,
+select.bg-slate-900,
+select.bg-slate-950 {
+  color: #ffffff !important;
+}
+
+/* Placeholder visibility */
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+/* Browser Autofill Fix (Chrome / Edge / Safari / Firefox) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Dark mode autofill */
+input.bg-slate-950:-webkit-autofill,
+input.bg-slate-900:-webkit-autofill,
+textarea.bg-slate-950:-webkit-autofill,
+textarea.bg-slate-900:-webkit-autofill {
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 0 0px 1000px #090d16 inset !important;
+}
+
+
+
+
