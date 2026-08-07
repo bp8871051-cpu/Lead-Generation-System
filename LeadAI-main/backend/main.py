@@ -107,27 +107,48 @@ try:
         comp.pin_code = "380058"
         db.commit()
 
-    # Seed Single Admin User
+    # Seed Default Admin & Employee Users
+    # 1. Admin User
     admin_user = db.query(User).filter(User.email == "admin@company.com").first()
     if not admin_user:
         admin_user = db.query(User).filter(User.email == "admin@company.internal").first()
     
+    hashed_admin_pw = bcrypt.hashpw("admin123".encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
     if not admin_user:
-        hashed_pw = bcrypt.hashpw("adminpassword123".encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
         admin_user = User(
             email="admin@company.com",
             full_name="Company System Admin",
             designation="Chief Administrator",
-            hashed_password=hashed_pw,
+            hashed_password=hashed_admin_pw,
             role="admin",
             is_active=True
         )
         db.add(admin_user)
-        db.commit()
     else:
-        # Ensure role is admin
+        admin_user.email = "admin@company.com"
         admin_user.role = "admin"
-        db.commit()
+        admin_user.hashed_password = hashed_admin_pw
+        admin_user.is_active = True
+
+    # 2. Employee User
+    emp_user = db.query(User).filter(User.email == "employee@company.com").first()
+    hashed_emp_pw = bcrypt.hashpw("employee123".encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
+    if not emp_user:
+        emp_user = User(
+            email="employee@company.com",
+            full_name="Lead AI Employee",
+            designation="Sales & Lead Associate",
+            hashed_password=hashed_emp_pw,
+            role="employee",
+            is_active=True
+        )
+        db.add(emp_user)
+    else:
+        emp_user.role = "employee"
+        emp_user.hashed_password = hashed_emp_pw
+        emp_user.is_active = True
+
+    db.commit()
 except Exception as e:
     db.rollback()
 finally:
