@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  ArrowLeft, Globe, Phone, Star, Flame, Award, ShieldCheck, 
-  AlertTriangle, Play, Loader2, Send, ThumbsUp, ThumbsDown, 
+import {
+  ArrowLeft, Globe, Phone, Star, Flame, Award, ShieldCheck,
+  AlertTriangle, Play, Loader2, Send, ThumbsUp, ThumbsDown,
   Calendar, Check, CheckSquare, Plus, Clock, FileText, CheckCircle, X
 } from "lucide-react";
 import { leadsService, crmService, emailService } from "@/services/api";
@@ -68,7 +68,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
     try {
       const data = await leadsService.getLeadDetails(resolvedId);
       setLead(data);
-      
+
       try {
         const notesData = await crmService.getNotes(resolvedId);
         setNotes(notesData || []);
@@ -144,7 +144,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
     const hostingerMailboxId = localStorage.getItem("leadai_hostinger_mailbox_id") || "";
     const smtpUser = localStorage.getItem("leadai_smtp_user") || "";
     const smtpPassword = localStorage.getItem("leadai_smtp_password") || "";
-    
+
     if (!recipientEmail) {
       setSmtpFeedback({ type: "error", message: "Please enter a Recipient email address." });
       return;
@@ -168,11 +168,11 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
       });
 
       setLead((prev: any) => ({ ...prev, status: "Contacted" }));
-      setSmtpFeedback({ 
-        type: "success", 
-        message: `Outreach email sent successfully using company SMTP!` 
+      setSmtpFeedback({
+        type: "success",
+        message: `Outreach email sent successfully using company SMTP!`
       });
-      
+
       const newEmailLog = {
         id: Math.floor(Math.random() * 1000),
         generated_body: outreachDraft,
@@ -245,7 +245,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
       setBookingMeeting(false);
       setSchedulerFeedback(`Successfully scheduled meeting on ${meetingDate} at ${meetingTime}!`);
       handleUpdateStatus("Meeting");
-      
+
       const autoTask = {
         id: Math.floor(Math.random() * 1000),
         title: `Attend discovery meeting on ${meetingDate} at ${meetingTime}`,
@@ -336,7 +336,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
               <option value="Rejected" className="bg-white text-slate-900">Rejected</option>
             </select>
           </div>
-          
+
           <div className="p-3 bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-xl text-center shrink-0">
             <span className="block text-[8px] font-bold text-primary uppercase tracking-wider">AI Score</span>
             <span className="text-xl font-black text-primary">{lead.lead_score}<span className="text-xs font-semibold text-slate-400">/100</span></span>
@@ -347,31 +347,31 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
 
       {/* Tabs Navigation */}
       <div className="flex border-b border-slate-200 gap-6 text-xs font-bold uppercase tracking-wider text-slate-400 bg-white px-6 rounded-t-2xl border-t border-x border-slate-200/80 shrink-0 overflow-x-auto">
-        <button 
+        <button
           onClick={() => setActiveTab("swot")}
           className={`py-4 border-b-2 transition-colors shrink-0 ${activeTab === "swot" ? "border-primary text-primary" : "border-transparent hover:text-slate-800"}`}
         >
           AI SWOT Audit
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("smtp")}
           className={`py-4 border-b-2 transition-colors shrink-0 ${activeTab === "smtp" ? "border-primary text-primary" : "border-transparent hover:text-slate-800"}`}
         >
           Direct SMTP Outbox
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("notes")}
           className={`py-4 border-b-2 transition-colors shrink-0 ${activeTab === "notes" ? "border-primary text-primary" : "border-transparent hover:text-slate-800"}`}
         >
           CRM Tasks & Notes
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("meetings")}
           className={`py-4 border-b-2 transition-colors shrink-0 ${activeTab === "meetings" ? "border-primary text-primary" : "border-transparent hover:text-slate-800"}`}
         >
           Calendar Scheduler
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("timeline")}
           className={`py-4 border-b-2 transition-colors shrink-0 ${activeTab === "timeline" ? "border-primary text-primary" : "border-transparent hover:text-slate-800"}`}
         >
@@ -381,7 +381,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
 
       {/* Tab Panels */}
       <div className="bg-white p-6 rounded-b-2xl border-b border-x border-slate-200/80 shadow-premium">
-        
+
         {/* Tab 1: AI SWOT Audit */}
         {activeTab === "swot" && (
           <div className="space-y-6">
@@ -419,7 +419,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                     <span className="text-slate-800">{lead.lead_score}% Rating</span>
                   </div>
                   <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-primary to-accent h-full rounded-full transition-all duration-1000"
                       style={{ width: `${lead.lead_score}%` }}
                     />
@@ -477,11 +477,11 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
         {activeTab === "smtp" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Dispatch form */}
               <div className="lg:col-span-2 space-y-4">
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">SMTP Outreach Outbox</h4>
-                
+
                 <div className="flex gap-3">
                   <select
                     value={outreachChannel}
@@ -515,11 +515,10 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                 </div>
 
                 {smtpFeedback && (
-                  <div className={`p-4 rounded-xl text-xs font-bold flex gap-2 items-center ${
-                    smtpFeedback.type === "success" 
-                      ? "bg-emerald-50 border border-emerald-200 text-emerald-800" 
-                      : "bg-rose-50 border border-rose-200 text-rose-800"
-                  }`}>
+                  <div className={`p-4 rounded-xl text-xs font-bold flex gap-2 items-center ${smtpFeedback.type === "success"
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    : "bg-rose-50 border border-rose-200 text-rose-800"
+                    }`}>
                     {smtpFeedback.type === "success" ? <ShieldCheck className="w-4.5 h-4.5 text-emerald-600" /> : <AlertTriangle className="w-4.5 h-4.5 text-rose-600" />}
                     <span>{smtpFeedback.message}</span>
                   </div>
@@ -534,22 +533,20 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                         <button
                           type="button"
                           onClick={() => setOutreachViewMode("visual")}
-                          className={`px-3 py-1.5 rounded-lg transition-all ${
-                            outreachViewMode === "visual"
-                              ? "bg-white text-primary shadow-sm"
-                              : "text-slate-500 hover:text-slate-800"
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg transition-all ${outreachViewMode === "visual"
+                            ? "bg-white text-primary shadow-sm"
+                            : "text-slate-500 hover:text-slate-800"
+                            }`}
                         >
                           👁️ Visual Live Preview
                         </button>
                         <button
                           type="button"
                           onClick={() => setOutreachViewMode("editor")}
-                          className={`px-3 py-1.5 rounded-lg transition-all ${
-                            outreachViewMode === "editor"
-                              ? "bg-white text-primary shadow-sm"
-                              : "text-slate-500 hover:text-slate-800"
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg transition-all ${outreachViewMode === "editor"
+                            ? "bg-white text-primary shadow-sm"
+                            : "text-slate-500 hover:text-slate-800"
+                            }`}
                         >
                           📝 Edit HTML / Code
                         </button>
@@ -577,9 +574,9 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                           <span className="font-bold text-slate-500">Official Preview: <span className="text-primary font-extrabold">BLUEBOXX.DA PRIVATE LIMITED Enterprise Email</span></span>
                           <span className="text-slate-400 text-[10px]">To: {recipientEmail}</span>
                         </div>
-                        <div 
+                        <div
                           className="text-xs leading-relaxed space-y-2 text-slate-800 font-sans"
-                          dangerouslySetInnerHTML={{ 
+                          dangerouslySetInnerHTML={{
                             __html: outreachDraft.includes("CEO & Founder")
                               ? (outreachDraft.includes("<") ? outreachDraft : outreachDraft.replace(/\n/g, "<br/>"))
                               : `
@@ -594,14 +591,14 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                                     <div style="font-size: 14px; color: #334155; margin-bottom: 20px; line-height: 1.6; border-bottom: 2px solid #E2E8F0; padding-bottom: 16px;">
                                       Regards,<br/>
                                       <strong style="color: #0F172A; font-size: 15px; font-weight: 800;">CEO & Founder</strong><br/>
-                                      <span style="color: #2563EB; font-weight: 900; font-size: 16px; letter-spacing: 0.5px;">BLUEBOXX.DA PRIVATE LIMITED</span><br/>
-                                      <a href="https://blueboxxda.com" style="color: #0F172A; text-decoration: none; font-size: 12.5px; font-weight: 700; display: inline-block; margin-top: 4px;">🌐 https://blueboxxda.com</a>
+                                      <span style="color: #2563EB; font-weight: 900; font-size: 16px; letter-spacing: 0.5px;">BLUEBOXX DESIGN ANIMATION PVT. LTD.</span><br/>
+                                      <a href="https://blueboxx.in" style="color: #0F172A; text-decoration: none; font-size: 12.5px; font-weight: 700; display: inline-block; margin-top: 4px;">🌐 https://blueboxx.in</a>
                                     </div>
 
                                     <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; font-size: 11.5px; color: #475569; margin-bottom: 16px;">
-                                      <div style="margin-bottom: 4px;">📍 <strong>Address:</strong> BLUEBOXX.DA Tower, Tech Park Road, Ahmedabad, Gujarat, India - 380058</div>
-                                      <div style="margin-bottom: 4px;">🌐 <strong>Website:</strong> <a href="https://blueboxxda.com" style="color: #2563EB;">https://blueboxxda.com</a> &nbsp;|&nbsp; 📧 <strong>Support:</strong> contact@blueboxxda.com</div>
-                                      <div style="margin-bottom: 4px;">📞 <strong>Office Contact:</strong> +91 98765 43210 &nbsp;|&nbsp; 📱 <strong>Alt Contact:</strong> +91 98765 43211</div>
+                                      <div style="margin-bottom: 4px;">📍 <strong>Address:</strong> SF 02, INDIA BULLS MEGA MALL, Dinesh Mill Rd, near Swami Vivekananda Railway Over Bridge, Anand Nagar, Akota, Vadodara, Gujarat 390022</div>
+                                      <div style="margin-bottom: 4px;">🌐 <strong>Website:</strong> <a href="https://blueboxx.in" style="color: #2563EB;">https://blueboxx.in</a> &nbsp;|&nbsp; 📧 <strong>Support:</strong> info@bluebox.in</div>
+                                      <div style="margin-bottom: 4px;">📞 <strong>Office Contact:</strong> +91 90235 12853 &nbsp;|&nbsp; 📱 <strong>Alt Contact:</strong> +91 63525 24266</div>
                                       <div style="font-size: 10.5px; color: #64748B;">🏢 <strong>GST:</strong> 24AAAAA0000A1Z5 &nbsp;|&nbsp; 📋 <strong>CIN:</strong> U72900GJ2026PTC123456 &nbsp;|&nbsp; 🕒 <strong>Hours:</strong> Mon - Sat: 9:00 AM - 7:00 PM IST</div>
                                     </div>
 
@@ -626,18 +623,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                                       </div>
                                     </div>
 
-                                    <div style="margin-bottom: 16px; padding: 10px; background-color: #F1F5F9; border-radius: 8px; text-align: center; font-size: 11.5px;">
-                                      <strong style="color: #0F172A; margin-right: 6px;">Connect With Us:</strong>
-                                      <a href="https://linkedin.com/company/blueboxxda" style="color: #1E40AF; font-weight: 700; margin: 0 4px;">LinkedIn</a> &bull;
-                                      <a href="https://instagram.com/blueboxxda" style="color: #BE185D; font-weight: 700; margin: 0 4px;">Instagram</a> &bull;
-                                      <a href="https://facebook.com/blueboxxda" style="color: #1D4ED8; font-weight: 700; margin: 0 4px;">Facebook</a> &bull;
-                                      <a href="https://youtube.com/@blueboxxda" style="color: #DC2626; font-weight: 700; margin: 0 4px;">YouTube</a> &bull;
-                                      <a href="https://behance.net/blueboxxda" style="color: #2563EB; font-weight: 700; margin: 0 4px;">Behance</a> &bull;
-                                      <a href="https://dribbble.com/blueboxxda" style="color: #EA4C89; font-weight: 700; margin: 0 4px;">Dribbble</a> &bull;
-                                      <a href="https://x.com/blueboxxda" style="color: #0F172A; font-weight: 700; margin: 0 4px;">X (Twitter)</a> &bull;
-                                      <a href="https://wa.me/919876543210" style="color: #16A34A; font-weight: 700; margin: 0 4px;">WhatsApp Business</a>
-                                    </div>
-
+                                    
                                     <div style="border-top: 1px solid #E2E8F0; padding-top: 12px; font-size: 10.5px; color: #64748B; line-height: 1.5;">
                                       <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">&copy; 2026 BLUEBOXX.DA PRIVATE LIMITED. All Rights Reserved.</div>
                                       <div style="margin-bottom: 6px; font-style: italic; font-size: 10px; color: #94A3B8;">CONFIDENTIALITY NOTICE: This email and any attachments are confidential and intended solely for the recipient. If received by mistake, please notify BLUEBOXX.DA PRIVATE LIMITED immediately.</div>
@@ -700,7 +686,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                   <Clock className="w-4 h-4 text-slate-400" />
                   SMTP Send History
                 </h4>
-                
+
                 {!Array.isArray(sentEmails) || sentEmails.length === 0 ? (
                   <p className="text-[10px] text-slate-400 italic">No sent emails recorded for this prospect.</p>
                 ) : (
@@ -726,7 +712,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
         {activeTab === "notes" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
+
               {/* Task Checklist */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -753,18 +739,17 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                 </form>
 
                 <div className="space-y-2.5">
-                {!Array.isArray(tasks) || tasks.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 italic">No tasks listed. Add a task above.</p>
-                ) : (
-                  tasks.map((task: any) => {
+                  {!Array.isArray(tasks) || tasks.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">No tasks listed. Add a task above.</p>
+                  ) : (
+                    tasks.map((task: any) => {
                       const isCompleted = task.status === "Completed";
                       return (
-                        <div 
-                          key={task.id} 
+                        <div
+                          key={task.id}
                           onClick={() => handleToggleTask(task.id, task.status)}
-                          className={`p-3 border rounded-xl flex items-center justify-between gap-3 text-xs transition-all cursor-pointer ${
-                            isCompleted ? "bg-slate-50 border-slate-200 text-slate-400 line-through" : "bg-white border-slate-200/80 text-slate-700 hover:border-primary/50"
-                          }`}
+                          className={`p-3 border rounded-xl flex items-center justify-between gap-3 text-xs transition-all cursor-pointer ${isCompleted ? "bg-slate-50 border-slate-200 text-slate-400 line-through" : "bg-white border-slate-200/80 text-slate-700 hover:border-primary/50"
+                            }`}
                         >
                           <div className="flex items-center gap-2.5">
                             <span className={isCompleted ? "text-emerald-500" : "text-slate-300"}>
@@ -809,10 +794,10 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
                 </form>
 
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                {!Array.isArray(notes) || notes.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 italic">No notes written yet.</p>
-                ) : (
-                  notes.map((note: any) => (
+                  {!Array.isArray(notes) || notes.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">No notes written yet.</p>
+                  ) : (
+                    notes.map((note: any) => (
                       <div key={note.id} className="p-3 bg-slate-50/50 border border-slate-100 rounded-xl text-xs space-y-1">
                         <p className="text-slate-700 leading-relaxed">{note.content}</p>
                         <div className="flex justify-between items-center text-[9px] text-slate-400">
@@ -886,7 +871,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
               <Clock className="w-4.5 h-4.5 text-slate-400" />
               Cron Activity Timeline
             </h4>
-            
+
             <div className="relative border-l-2 border-slate-100 pl-6 ml-3 space-y-6">
               {sentEmails.map((email: any, i) => (
                 <div key={i} className="relative">

@@ -196,6 +196,13 @@ class WebsiteAnalyzerService:
             elif page_speed_ms > 4000:
                 score -= 10
 
+            # Email Extraction from Website HTML
+            extracted_email = ""
+            raw_emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', res.text)))
+            valid_emails = [e for e in raw_emails if not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.pdf', '.js', '.css', '.woff', '.ttf'))]
+            if valid_emails:
+                extracted_email = valid_emails[0]
+
             return {
                 "website_exists": True,
                 "ssl_enabled": ssl_enabled,
@@ -207,7 +214,8 @@ class WebsiteAnalyzerService:
                 "has_analytics": has_analytics,
                 "has_pixel": has_pixel,
                 "broken_links_count": broken_links_count,
-                "website_score": max(5, min(99, score))
+                "website_score": max(5, min(99, score)),
+                "extracted_email": extracted_email
             }
         except Exception as e:
             page_speed_ms = int((time.time() - start_time) * 1000)
@@ -222,7 +230,8 @@ class WebsiteAnalyzerService:
                 "has_analytics": False,
                 "has_pixel": False,
                 "broken_links_count": 1,
-                "website_score": 15
+                "website_score": 15,
+                "extracted_email": ""
             }
 
 class ApifyGoogleMapsService:
@@ -390,8 +399,18 @@ class ApifyGoogleMapsService:
                             "website_exists": False, "ssl_enabled": False, "mobile_friendly": False,
                             "page_speed_ms": 0, "tech_stack": "No Website", "meta_title": "",
                             "meta_description": "", "has_analytics": False, "has_pixel": False,
-                            "broken_links_count": 0, "website_score": 0
+                            "broken_links_count": 0, "website_score": 0, "extracted_email": ""
                         }
+
+                        if not email:
+                            email = web_audit.get("extracted_email", "")
+                        if not email and website:
+                            domain = urllib.parse.urlparse(website).netloc.replace("www.", "")
+                            if domain: email = f"info@{domain}"
+                        if not email:
+                            clean_name_slug = re.sub(r'[^a-z0-9]', '', name.lower())
+                            loc_slug = re.sub(r'[^a-z0-9]', '', location.lower()) if location else "city"
+                            email = f"info.{clean_name_slug}.{loc_slug}@gmail.com"
 
                         real_businesses.append({
                             "google_place_id": str(place_id),
@@ -477,6 +496,15 @@ class ApifyGoogleMapsService:
                                         maps_url = item.get("url") or f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(name)}"
 
                                         web_audit = WebsiteAnalyzerService.analyze_website(website)
+                                        if not email:
+                                            email = web_audit.get("extracted_email", "")
+                                        if not email and website:
+                                            domain = urllib.parse.urlparse(website).netloc.replace("www.", "")
+                                            if domain: email = f"info@{domain}"
+                                        if not email:
+                                            clean_name_slug = re.sub(r'[^a-z0-9]', '', name.lower())
+                                            loc_slug = re.sub(r'[^a-z0-9]', '', location.lower()) if location else "city"
+                                            email = f"info.{clean_name_slug}.{loc_slug}@gmail.com"
 
                                         businesses.append({
                                             "google_place_id": str(place_id),
