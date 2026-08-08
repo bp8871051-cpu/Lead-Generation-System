@@ -262,7 +262,24 @@ def send_outreach_email(
     smtp_port = settings.SMTP_PORT
     sender = settings.EMAIL_FROM or smtp_user
 
-    if smtp_user and smtp_password:
+    if not smtp_user or not smtp_password:
+        raise HTTPException(
+            status_code=400,
+            detail="SMTP credentials (SMTP_USER/SMTP_PASS) are not configured in backend settings or .env file."
+        )
+
+    # Attempt to send email via SMTP with fallback port support
+    sent_successfully = False
+    last_smtp_error = ""
+
+    # Build ports to try: primary first, fallback second
+    ports_to_try = [smtp_port]
+    if smtp_port == 587 and 465 not in ports_to_try:
+        ports_to_try.append(465)
+    elif smtp_port == 465 and 587 not in ports_to_try:
+        ports_to_try.append(587)
+
+    for port in ports_to_try:
         try:
             msg = MIMEMultipart('alternative')
             msg['From'] = sender
@@ -270,22 +287,32 @@ def send_outreach_email(
             msg['Subject'] = req.subject
             msg.attach(MIMEText(final_body, 'html'))
 
-            if smtp_port == 465:
-                server = smtplib.SMTP_SSL(smtp_host, 465, timeout=10)
+            if port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, 465, timeout=12)
             else:
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                server = smtplib.SMTP(smtp_host, port, timeout=12)
+                server.ehlo()
                 server.starttls()
+                server.ehlo()
 
             server.login(smtp_user, smtp_password.strip())
             server.sendmail(sender, req.recipient_email, msg.as_string())
             server.quit()
+            sent_successfully = True
+            break
         except smtplib.SMTPAuthenticationError:
             raise HTTPException(
                 status_code=400, 
-                detail="SMTP Authentication failed. Verify SMTP_USER & SMTP_PASS in backend .env file."
+                detail=f"SMTP Authentication failed for user '{smtp_user}'. Please verify SMTP_USER & SMTP_PASS in backend settings."
             )
         except Exception as e:
-            print(f"SMTP notification: {e}")
+            last_smtp_error = str(e)
+
+    if not sent_successfully:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send email via SMTP ({smtp_host}): {last_smtp_error or 'Connection failed'}"
+        )
 
     lead.status = "Contacted"
     
@@ -316,3 +343,4 @@ def send_outreach_email(
     db.commit()
 
     return {"status": "success", "message": f"Email successfully sent to {req.recipient_email}"}
+

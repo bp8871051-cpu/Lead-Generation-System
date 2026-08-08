@@ -252,11 +252,14 @@ def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
                 server = smtplib.SMTP_SSL(smtp_host, 465, timeout=10)
             else:
                 server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                server.ehlo()
                 server.starttls()
+                server.ehlo()
 
             server.login(smtp_user, smtp_password.strip())
             server.sendmail(sender, user.email, msg.as_string())
             server.quit()
+
         except Exception as e:
             logger.error(f"SMTP error sending reset email: {e}")
 
