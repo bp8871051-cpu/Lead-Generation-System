@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, KeyRound, AlertCircle, ArrowRight, ShieldCheck, Eye, EyeOff, Building2, X, Check, Loader2 } from "lucide-react";
-import { authService } from "@/services/api";
+import { authService, adminService } from "@/services/api";
 
 function LoginForm() {
   const router = useRouter();
@@ -34,8 +34,28 @@ function LoginForm() {
       await authService.login({ email, password });
       window.location.href = "/dashboard";
     } catch (err: any) {
-      setError(err.message || "Invalid email or password.");
-      setLoading(false);
+      let rehydrated = false;
+      try {
+        const stored = localStorage.getItem("leadai_custom_employees");
+        if (stored) {
+          const list = JSON.parse(stored);
+          const matched = list.find((item: any) => item.email.toLowerCase() === email.trim().toLowerCase());
+          if (matched) {
+            await adminService.createEmployee(matched);
+            await authService.login({ email, password });
+            rehydrated = true;
+            window.location.href = "/dashboard";
+            return;
+          }
+        }
+      } catch (rehydrateErr) {
+        console.error("Login re-hydration error:", rehydrateErr);
+      }
+
+      if (!rehydrated) {
+        setError(err.message || "Invalid email or password.");
+        setLoading(false);
+      }
     }
   };
 

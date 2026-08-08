@@ -64,7 +64,35 @@ export default function SettingsPage() {
       const comp = await adminService.getCompanyProfile();
       if (comp) setCompanyData(comp);
 
-      const emps = await adminService.getEmployees();
+      let emps = await adminService.getEmployees() || [];
+
+      // Auto re-hydrate custom employees if Render server reset SQLite DB
+      try {
+        const stored = localStorage.getItem("leadai_custom_employees");
+        if (stored) {
+          const localEmps = JSON.parse(stored);
+          const dbEmails = new Set(emps.map((e: any) => e.email.toLowerCase()));
+          let needsRefresh = false;
+
+          for (const localEmp of localEmps) {
+            if (localEmp.email && !dbEmails.has(localEmp.email.toLowerCase())) {
+              try {
+                await adminService.createEmployee(localEmp);
+                needsRefresh = true;
+              } catch (rehydrateErr) {
+                console.error("Employee re-hydration notice:", rehydrateErr);
+              }
+            }
+          }
+
+          if (needsRefresh) {
+            emps = await adminService.getEmployees() || [];
+          }
+        }
+      } catch (e) {
+        console.error("Local employee storage parse error:", e);
+      }
+
       setEmployees(emps || []);
 
       const smtp = await adminService.getSmtpStatus();
@@ -101,6 +129,17 @@ export default function SettingsPage() {
     setFeedback(null);
     try {
       await adminService.createEmployee(newEmployee);
+
+      // Save custom employee to localStorage for cross-restart persistence
+      try {
+        const stored = localStorage.getItem("leadai_custom_employees");
+        const list = stored ? JSON.parse(stored) : [];
+        if (!list.some((item: any) => item.email.toLowerCase() === newEmployee.email.toLowerCase())) {
+          list.push(newEmployee);
+          localStorage.setItem("leadai_custom_employees", JSON.stringify(list));
+        }
+      } catch (e) {}
+
       setShowAddEmployeeModal(false);
       setNewEmployee({ email: "", full_name: "", designation: "Sales Executive", password: "", role: "employee" });
       const updatedEmps = await adminService.getEmployees();
