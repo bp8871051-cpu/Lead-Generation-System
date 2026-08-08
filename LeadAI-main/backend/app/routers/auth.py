@@ -140,8 +140,13 @@ def login(user_in: UserLogin, response: Response, db: Session = Depends(get_db))
 
 @router.post("/logout")
 def logout(response: Response):
+    # Comprehensive cookie clearance for HTTP-Only and client cookies
     response.delete_cookie(key="leadai_session", path="/")
     response.delete_cookie(key="token", path="/")
+    response.set_cookie(key="leadai_session", value="", expires=0, max_age=0, path="/", httponly=True, samesite="lax")
+    response.set_cookie(key="leadai_session", value="", expires=0, max_age=0, path="/", httponly=True, samesite="none", secure=True)
+    response.set_cookie(key="token", value="", expires=0, max_age=0, path="/", httponly=False, samesite="lax")
+    response.set_cookie(key="token", value="", expires=0, max_age=0, path="/", httponly=False, samesite="none", secure=True)
     return {"status": "success", "message": "Logged out successfully."}
 
 @router.get("/me", response_model=UserResponse)

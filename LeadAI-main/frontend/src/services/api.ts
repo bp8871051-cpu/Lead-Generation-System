@@ -106,14 +106,20 @@ export const authService = {
   logout: async () => {
     try {
       await api.post<any>("/auth/logout");
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Logout API notice:", e);
     }
     if (typeof window !== "undefined") {
       localStorage.removeItem("leadai_token");
       localStorage.removeItem("token");
+      localStorage.removeItem("leadai_user");
+      
       document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
       document.cookie = "leadai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      document.cookie = "token=; path=/; max-age=0;";
+      document.cookie = "leadai_session=; path=/; max-age=0;";
+
+      window.location.href = "/login";
     }
   },
   getCurrentUser: async () => {

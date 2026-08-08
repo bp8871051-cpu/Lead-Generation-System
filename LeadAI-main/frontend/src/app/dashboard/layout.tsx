@@ -97,9 +97,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     fetchUser();
   }, [router]);
 
-  const handleLogout = () => {
-    authService.logout();
-    router.push("/login");
+  const handleLogout = async () => {
+    setLoading(true);
+    await authService.logout();
   };
 
   if (loading) {
