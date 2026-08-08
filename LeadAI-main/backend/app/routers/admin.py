@@ -150,6 +150,8 @@ def toggle_employee_status(
     db.commit()
     return {"status": "success", "is_active": target_user.is_active}
 
+from app.routers.emails import create_smtp_server
+
 # ==========================================
 # SMTP & System Utilities
 # ==========================================
@@ -170,11 +172,7 @@ def check_smtp_status(current_user: User = Depends(get_current_user)):
         }
 
     try:
-        if port == 465:
-            server = smtplib.SMTP_SSL(host, port, timeout=5)
-        else:
-            server = smtplib.SMTP(host, port, timeout=5)
-            server.starttls()
+        server = create_smtp_server(host, port, timeout=5.0)
         server.login(user, password.strip())
         server.quit()
         return {

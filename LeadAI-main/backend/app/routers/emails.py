@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
+import socket
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -15,6 +16,30 @@ from app.services import AILeadAnalyzerService
 from app.config import settings
 
 router = APIRouter(prefix="/emails", tags=["emails"])
+
+def create_smtp_server(host: str, port: int, timeout: float = 12.0):
+    """
+    Creates an SMTP or SMTP_SSL connection enforcing IPv4 socket resolution.
+    This prevents [Errno 101] Network is unreachable errors on cloud platforms like Render/Docker.
+    """
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def ipv4_getaddrinfo(h, p, family=0, type=0, proto=0, flags=0):
+        return orig_getaddrinfo(h, p, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = ipv4_getaddrinfo
+    try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, 465, timeout=timeout)
+        else:
+            server = smtplib.SMTP(host, port, timeout=timeout)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+        return server
+    finally:
+        socket.getaddrinfo = orig_getaddrinfo
+
 
 def generate_html_email_footer(user: User, company: Company) -> str:
     # Resolve company fields with BLUEBOXX.DA PRIVATE LIMITED fallbacks
@@ -287,14 +312,7 @@ def send_outreach_email(
             msg['Subject'] = req.subject
             msg.attach(MIMEText(final_body, 'html'))
 
-            if port == 465:
-                server = smtplib.SMTP_SSL(smtp_host, 465, timeout=12)
-            else:
-                server = smtplib.SMTP(smtp_host, port, timeout=12)
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-
+            server = create_smtp_server(smtp_host, port, timeout=12.0)
             server.login(smtp_user, smtp_password.strip())
             server.sendmail(sender, req.recipient_email, msg.as_string())
             server.quit()
