@@ -20,19 +20,36 @@ from app.config import settings
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
-def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 12.0):
+def resolve_ipv4_host(host: str) -> str:
     """
-    Creates an SMTP or SMTP_SSL connection enforcing IPv4 socket resolution.
-    This prevents [Errno 101] Network is unreachable errors on cloud platforms like Render/Docker.
+    Resolves a hostname (e.g., smtp.gmail.com) directly to an IPv4 IP address.
+    Prevents IPv6 socket timeouts on dual-stack Windows/ISP networks.
     """
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+        if infos and len(infos) > 0:
+            return infos[0][4][0]
+    except Exception:
+        pass
+    return host
+
+
+def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 10.0):
+    """
+    Creates an SMTP or SMTP_SSL connection enforcing IPv4 resolution and host SSL verification.
+    """
+    enc_upper = (encryption or "TLS").upper()
+    target_ip = resolve_ipv4_host(host)
+
     orig_getaddrinfo = socket.getaddrinfo
 
-    def ipv4_getaddrinfo(h, p, family=0, type=0, proto=0, flags=0):
-        return orig_getaddrinfo(h, p, socket.AF_INET, type, proto, flags)
+    def forced_ipv4_getaddrinfo(h, p, family=0, type=0, proto=0, flags=0):
+        if h == host:
+            return orig_getaddrinfo(target_ip, p, socket.AF_INET, type, proto, flags)
+        return orig_getaddrinfo(h, p, family, type, proto, flags)
 
-    socket.getaddrinfo = ipv4_getaddrinfo
+    socket.getaddrinfo = forced_ipv4_getaddrinfo
     try:
-        enc_upper = (encryption or "TLS").upper()
         if port == 465 or enc_upper == "SSL":
             server = smtplib.SMTP_SSL(host, port or 465, timeout=timeout)
         else:
@@ -44,6 +61,7 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
         return server
     finally:
         socket.getaddrinfo = orig_getaddrinfo
+
 
 
 def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session) -> dict:
