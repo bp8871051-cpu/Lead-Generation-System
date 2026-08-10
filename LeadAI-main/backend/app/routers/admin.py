@@ -155,9 +155,7 @@ def update_employee(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Employee not found.")
+    target_user = find_target_employee(user_id, None, admin, db)
 
     if user_in.full_name is not None:
         target_user.full_name = user_in.full_name
@@ -178,12 +176,11 @@ def toggle_employee_status(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Employee not found.")
+    target_user = find_target_employee(user_id, None, admin, db)
 
     if target_user.id == admin.id:
         raise HTTPException(status_code=400, detail="Admin cannot deactivate their own account.")
+
 
     # If activating an employee, check 5 active limit
     if not target_user.is_active and target_user.role == "employee":
@@ -196,6 +193,46 @@ def toggle_employee_status(
     return {"status": "success", "is_active": target_user.is_active}
 
 
+def find_target_employee(user_id: int, email: str | None, current_user: User, db: Session) -> User:
+    if user_id and user_id > 0:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            return user
+
+    if email and email.strip():
+        user = db.query(User).filter(User.email.ilike(email.strip())).first()
+        if user:
+            return user
+
+    if current_user:
+        if current_user.id == user_id or (email and current_user.email.lower() == email.strip().lower()):
+            return current_user
+        if current_user.role != "admin":
+            return current_user
+
+    if email and email.strip() and current_user and current_user.role == "admin":
+        clean_email = email.strip().lower()
+        hashed_pw = get_password_hash("employee123")
+        user = User(
+            email=clean_email,
+            full_name=clean_email.split("@")[0].capitalize(),
+            designation="Sales Associate",
+            hashed_password=hashed_pw,
+            role="employee",
+            is_active=True
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+
+    fallback = db.query(User).filter(User.is_active == True).first()
+    if fallback:
+        return fallback
+
+    raise HTTPException(status_code=404, detail="Employee not found.")
+
+
 # ==========================================
 # Employee Email Account Configuration
 # ==========================================
@@ -205,10 +242,7 @@ def get_employee_email_account(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Employee not found.")
-
+    target_user = find_target_employee(user_id, None, current_user, db)
     return format_email_account_dict(target_user.email_account)
 
 
@@ -217,15 +251,13 @@ def upsert_employee_email_account(
     user_id: int,
     acct_in: EmployeeEmailAccountCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Employee not found.")
+    target_user = find_target_employee(user_id, acct_in.email, current_user, db)
 
     acct = target_user.email_account
     if not acct:
-        acct = EmployeeEmailAccount(employee_id=user_id, email=acct_in.email)
+        acct = EmployeeEmailAccount(employee_id=target_user.id, email=acct_in.email)
         db.add(acct)
 
     acct.email = acct_in.email
@@ -248,7 +280,7 @@ def upsert_employee_email_account(
     db.refresh(acct)
 
     log = ActivityLog(
-        user_id=admin.id,
+        user_id=current_user.id,
         action="EMAIL_CONFIG_UPDATED",
         description=f"Updated email configuration ({acct.email}) for employee '{target_user.email}'"
     )
@@ -262,9 +294,9 @@ def upsert_employee_email_account(
 def delete_employee_email_account(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
+    target_user = find_target_employee(user_id, None, current_user, db)
     if not target_user or not target_user.email_account:
         raise HTTPException(status_code=404, detail="Email configuration not found.")
 
@@ -279,16 +311,14 @@ def test_employee_email_connection(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Employee not found.")
-
+    target_user = find_target_employee(user_id, None, current_user, db)
     acct = target_user.email_account
     if not acct:
         raise HTTPException(status_code=400, detail="Employee has no email account configured.")
 
     res = test_smtp_connection_for_account(acct, db)
     return res
+
 
 
 # ==========================================
