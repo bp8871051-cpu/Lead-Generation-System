@@ -530,7 +530,11 @@ export default function SettingsPage() {
                     const acct = emp.email_account;
                     const isTesting = testingConnectionId === emp.id;
                     const isConnected = acct?.last_test_status === "Connected";
-                    const isFailed = acct?.last_test_status?.startsWith("Connection Failed");
+                    const isFailed = !!acct?.last_test_status && (
+                      acct.last_test_status.startsWith("Connection Failed") ||
+                      acct.last_test_status.includes("SMTP_") ||
+                      acct.last_test_status.includes("timed out")
+                    );
 
                     return (
                       <tr key={emp.id} className="hover:bg-slate-900/50">
@@ -566,8 +570,9 @@ export default function SettingsPage() {
                                   : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
                               }`}>
                                 <Check className="w-3 h-3" />
-                                {acct.last_test_status || "Configured (Not Tested)"}
+                                {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured (Not Tested)")}
                               </span>
+
                               {acct.last_tested_at && (
                                 <div className="text-[9px] text-slate-500 mt-0.5">
                                   Last tested: {new Date(acct.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

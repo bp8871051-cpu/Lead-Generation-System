@@ -1,4 +1,12 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://lead-generation-system-tz7e.onrender.com/api";
+const getApiBaseUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return "http://localhost:8000/api";
+  }
+  return "https://lead-generation-system-tz7e.onrender.com/api";
+};
 
 class ApiClient {
   private getHeaders(): HeadersInit {
@@ -15,8 +23,10 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestInit = {}, retries: number = 2): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}${endpoint}`;
     const headers = { ...this.getHeaders(), ...options.headers };
+
     
     try {
       const response = await fetch(url, { 
