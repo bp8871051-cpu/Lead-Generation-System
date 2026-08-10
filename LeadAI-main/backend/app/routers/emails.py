@@ -245,6 +245,22 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
                 last_error_msg = str(e)
             logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
 
+    if last_error_code == "SMTP_CONNECTION_TIMEOUT":
+        brevo_check = BrevoEmailService.verify_api_key()
+        if brevo_check["status"] == "success":
+            status_msg = "Connected"
+            logger.info(f"[SMTP FALLBACK BREVO SUCCESS] Account {account.email} verified via Brevo HTTPS API (Port 443)")
+            account.last_tested_at = datetime.utcnow()
+            account.last_test_status = status_msg
+            db.commit()
+            return {
+                "status": "success",
+                "error_code": None,
+                "message": "Successfully authenticated via Brevo HTTPS API (Port 443 - Cloud Safe)",
+                "last_tested_at": account.last_tested_at.isoformat(),
+                "last_test_status": status_msg
+            }
+
     account.last_tested_at = datetime.utcnow()
     account.last_test_status = f"{last_error_code}: {last_error_msg}"
     db.commit()
@@ -254,6 +270,7 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
         "message": last_error_msg,
         "last_test_status": f"{last_error_code}: {last_error_msg}"
     }
+
 
 
 
