@@ -11,12 +11,13 @@ import { motion } from "framer-motion";
 import { adminService, exportService, authService } from "@/services/api";
 
 const PROVIDER_PRESETS: Record<string, { host: string; port: number; encryption: string; authMethod: string }> = {
-  "Gmail": { host: "smtp.gmail.com", port: 587, encryption: "TLS", authMethod: "SMTP" },
-  "Google Workspace": { host: "smtp.gmail.com", port: 587, encryption: "TLS", authMethod: "OAuth 2.0" },
+  "Gmail": { host: "smtp.gmail.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
+  "Google Workspace": { host: "smtp.gmail.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
   "Microsoft 365 / Outlook": { host: "smtp.office365.com", port: 587, encryption: "TLS", authMethod: "SMTP" },
   "Hostinger": { host: "smtp.hostinger.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
   "Custom SMTP": { host: "", port: 587, encryption: "TLS", authMethod: "SMTP" }
 };
+
 
 export default function SettingsPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -833,10 +834,18 @@ export default function SettingsPage() {
                       onChange={e => setEmailForm({ ...emailForm, password: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
                     />
-                    <p className="text-[9.5px] text-slate-500 mt-1">
-                      🔒 Credentials are encrypted server-side with AES/Fernet encryption before saving.
-                    </p>
+                    <div className="mt-1 space-y-1">
+                      {(emailForm.provider === "Gmail" || emailForm.provider === "Google Workspace") && (
+                        <p className="text-[10px] text-amber-400 font-bold bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                          💡 <strong>Gmail / Google Workspace Tip:</strong> Use a 16-character <strong>App Password</strong> generated at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline text-amber-300">myaccount.google.com/apppasswords</a>. Your regular Google account password will fail.
+                        </p>
+                      )}
+                      <p className="text-[9.5px] text-slate-500">
+                        🔒 Credentials are encrypted server-side with AES/Fernet encryption before saving.
+                      </p>
+                    </div>
                   </div>
+
 
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800">
                     {editingEmailEmployee.email_account ? (

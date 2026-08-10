@@ -49,6 +49,7 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
 def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session) -> dict:
     """
     Validates credentials by attempting a real SMTP connection for a specific employee email account.
+    Includes multi-port fallback (Port 465 SSL & Port 587 TLS) to prevent timeout failures on cloud hosts/ISPs.
     """
     if not account or not account.smtp_host or not account.smtp_username:
         status_msg = "Connection Failed: Missing host or username configuration"
@@ -65,38 +66,56 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
         db.commit()
         return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
 
-    try:
-        server = create_smtp_server(
-            host=account.smtp_host,
-            port=account.smtp_port or 587,
-            encryption=account.encryption or "TLS",
-            timeout=8.0
-        )
-        server.login(account.smtp_username, decrypted_pw.strip())
-        server.quit()
+    primary_port = account.smtp_port or (465 if (account.encryption or "").upper() == "SSL" else 587)
+    primary_enc = account.encryption or ("SSL" if primary_port == 465 else "TLS")
 
-        status_msg = "Connected"
-        account.last_tested_at = datetime.utcnow()
-        account.last_test_status = status_msg
-        db.commit()
-        return {
-            "status": "success",
-            "message": f"Successfully authenticated with {account.smtp_host}",
-            "last_tested_at": account.last_tested_at.isoformat(),
-            "last_test_status": status_msg
-        }
-    except smtplib.SMTPAuthenticationError:
-        status_msg = "Connection Failed: Invalid credentials / authentication failed"
-        account.last_tested_at = datetime.utcnow()
-        account.last_test_status = status_msg
-        db.commit()
-        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
-    except Exception as e:
-        status_msg = f"Connection Failed: {str(e)}"
-        account.last_tested_at = datetime.utcnow()
-        account.last_test_status = status_msg
-        db.commit()
-        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+    ports_to_try = [
+        (primary_port, primary_enc),
+        (465 if primary_port != 465 else 587, "SSL" if primary_port != 465 else "TLS")
+    ]
+
+    last_error = ""
+    for port, enc in ports_to_try:
+        try:
+            server = create_smtp_server(
+                host=account.smtp_host,
+                port=port,
+                encryption=enc,
+                timeout=6.0
+            )
+            server.login(account.smtp_username, decrypted_pw.strip())
+            server.quit()
+
+            # Auto-save working port & encryption if alternate port succeeded
+            if port != account.smtp_port or enc != account.encryption:
+                account.smtp_port = port
+                account.encryption = enc
+
+            status_msg = "Connected"
+            account.last_tested_at = datetime.utcnow()
+            account.last_test_status = status_msg
+            db.commit()
+            return {
+                "status": "success",
+                "message": f"Successfully authenticated with {account.smtp_host}:{port} ({enc})",
+                "last_tested_at": account.last_tested_at.isoformat(),
+                "last_test_status": status_msg
+            }
+        except smtplib.SMTPAuthenticationError:
+            status_msg = "Connection Failed: Invalid credentials / auth error (Use Gmail 16-char App Password)"
+            account.last_tested_at = datetime.utcnow()
+            account.last_test_status = status_msg
+            db.commit()
+            return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+        except Exception as e:
+            last_error = str(e)
+
+    status_msg = f"Connection Failed: {last_error or 'timed out'}"
+    account.last_tested_at = datetime.utcnow()
+    account.last_test_status = status_msg
+    db.commit()
+    return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+
 
 
 def generate_html_email_footer(user: User, company: Company) -> str:
@@ -403,23 +422,34 @@ def send_outreach_email(
     sent_successfully = False
     last_smtp_error = ""
 
-    try:
-        msg = MIMEMultipart('alternative')
-        from_formatted = f"{sender_name} <{sender_email}>"
-        msg['From'] = from_formatted
-        msg['To'] = req.recipient_email
-        msg['Subject'] = req.subject
-        msg.attach(MIMEText(final_body, 'html'))
+    primary_port = smtp_port or (465 if (encryption or "").upper() == "SSL" else 587)
+    primary_enc = encryption or ("SSL" if primary_port == 465 else "TLS")
+    ports_to_try = [
+        (primary_port, primary_enc),
+        (465 if primary_port != 465 else 587, "SSL" if primary_port != 465 else "TLS")
+    ]
 
-        server = create_smtp_server(smtp_host, smtp_port, encryption=encryption, timeout=10.0)
-        server.login(smtp_user, smtp_pass.strip())
-        server.sendmail(sender_email, req.recipient_email, msg.as_string())
-        server.quit()
-        sent_successfully = True
-    except smtplib.SMTPAuthenticationError:
-        last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'"
-    except Exception as e:
-        last_smtp_error = str(e)
+    for port, enc in ports_to_try:
+        try:
+            msg = MIMEMultipart('alternative')
+            from_formatted = f"{sender_name} <{sender_email}>"
+            msg['From'] = from_formatted
+            msg['To'] = req.recipient_email
+            msg['Subject'] = req.subject
+            msg.attach(MIMEText(final_body, 'html'))
+
+            server = create_smtp_server(smtp_host, port, encryption=enc, timeout=7.0)
+            server.login(smtp_user, smtp_pass.strip())
+            server.sendmail(sender_email, req.recipient_email, msg.as_string())
+            server.quit()
+            sent_successfully = True
+            break
+        except smtplib.SMTPAuthenticationError:
+            last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'. If using Gmail, please use a 16-character App Password."
+            break
+        except Exception as e:
+            last_smtp_error = str(e)
+
 
     default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
     if not default_campaign:
