@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base, SessionLocal
 from app.config import settings
 from sqlalchemy import text
-from app.models import User, Company
+from app.models import User, Company, EmployeeEmailAccount
+from app.security_utils import encrypt_credential
 import bcrypt
+
 
 # Import routers
 from app.routers import auth, search, leads, crm, analytics, emails, admin, export
@@ -155,10 +157,60 @@ try:
         emp_user.is_active = True
 
     db.commit()
+
+    # 3. Employee User & Email Account Seeding (Bhaumik Prajapati - bhaumik2652005@gmail.com)
+    bhaumik_user = db.query(User).filter(User.email == "bhaumik2652005@gmail.com").first()
+    if not bhaumik_user:
+        bhaumik_user = User(
+            email="bhaumik2652005@gmail.com",
+            full_name="Bhaumik Prajapati",
+            designation="Lead AI Sales Specialist",
+            hashed_password=hashed_emp_pw,
+            role="employee",
+            is_active=True
+        )
+        db.add(bhaumik_user)
+        db.commit()
+        db.refresh(bhaumik_user)
+    else:
+        bhaumik_user.role = "employee"
+        bhaumik_user.is_active = True
+        db.commit()
+
+    bhaumik_acct = db.query(EmployeeEmailAccount).filter(EmployeeEmailAccount.employee_id == bhaumik_user.id).first()
+    if not bhaumik_acct:
+        bhaumik_acct = EmployeeEmailAccount(
+            employee_id=bhaumik_user.id,
+            email="bhaumik2652005@gmail.com",
+            provider="Gmail",
+            authentication_method="SMTP",
+            smtp_host="smtp.gmail.com",
+            smtp_port=587,
+            encryption="TLS",
+            smtp_username="bhaumik2652005@gmail.com",
+            encrypted_smtp_password=encrypt_credential("wlmr dypf gzru ztho"),
+            sender_name="Bhaumik Prajapati",
+            is_active=True,
+            is_default=True
+        )
+        db.add(bhaumik_acct)
+        db.commit()
+    else:
+        bhaumik_acct.email = "bhaumik2652005@gmail.com"
+        bhaumik_acct.provider = "Gmail"
+        bhaumik_acct.smtp_host = "smtp.gmail.com"
+        bhaumik_acct.smtp_port = 587
+        bhaumik_acct.encryption = "TLS"
+        bhaumik_acct.smtp_username = "bhaumik2652005@gmail.com"
+        bhaumik_acct.encrypted_smtp_password = encrypt_credential("wlmr dypf gzru ztho")
+        bhaumik_acct.sender_name = "Bhaumik Prajapati"
+        bhaumik_acct.is_active = True
+        db.commit()
 except Exception as e:
     db.rollback()
 finally:
     db.close()
+
 
 app = FastAPI(
     title="LeadAI Single Company Internal CRM API",

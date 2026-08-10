@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import List, Optional
 import socket
 import smtplib
+import ssl
 from email.mime.text import MIMEText
+
 from email.mime.multipart import MIMEMultipart
 
 from app.database import get_db
@@ -19,6 +21,11 @@ from app.security_utils import decrypt_credential
 from app.config import settings
 
 router = APIRouter(prefix="/emails", tags=["emails"])
+
+import logging
+
+logger = logging.getLogger("leadai.smtp")
+logger.setLevel(logging.INFO)
 
 def resolve_ipv4_host(host: str) -> str:
     """
@@ -40,6 +47,8 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
     """
     enc_upper = (encryption or "TLS").upper()
     target_ip = resolve_ipv4_host(host)
+
+    logger.info(f"[SMTP START] Connecting host={host} (IP={target_ip}), port={port}, encryption={enc_upper}")
 
     orig_getaddrinfo = socket.getaddrinfo
 
@@ -63,26 +72,30 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
         socket.getaddrinfo = orig_getaddrinfo
 
 
-
 def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session) -> dict:
     """
     Validates credentials by attempting a real SMTP connection for a specific employee email account.
-    Includes multi-port fallback (Port 465 SSL & Port 587 TLS) to prevent timeout failures on cloud hosts/ISPs.
+    Returns structured JSON with error_code, status, message, and timestamp.
     """
     if not account or not account.smtp_host or not account.smtp_username:
-        status_msg = "Connection Failed: Missing host or username configuration"
-        account.last_tested_at = datetime.utcnow()
-        account.last_test_status = status_msg
-        db.commit()
-        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+        error_code = "SMTP_CONFIGURATION_ERROR"
+        status_msg = "Missing host or username configuration"
+        logger.error(f"[SMTP ERROR] error_code={error_code}, message={status_msg}")
+        if account:
+            account.last_tested_at = datetime.utcnow()
+            account.last_test_status = f"{error_code}: {status_msg}"
+            db.commit()
+        return {"status": "failed", "error_code": error_code, "message": status_msg, "last_test_status": status_msg}
 
     decrypted_pw = decrypt_credential(account.encrypted_smtp_password or "")
     if not decrypted_pw:
-        status_msg = "Connection Failed: Password not configured"
+        error_code = "SMTP_CONFIGURATION_ERROR"
+        status_msg = "Password not configured. Please enter password or App Password."
+        logger.error(f"[SMTP ERROR] error_code={error_code}, account={account.email}, message={status_msg}")
         account.last_tested_at = datetime.utcnow()
-        account.last_test_status = status_msg
+        account.last_test_status = f"{error_code}: {status_msg}"
         db.commit()
-        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+        return {"status": "failed", "error_code": error_code, "message": status_msg, "last_test_status": status_msg}
 
     primary_port = account.smtp_port or (465 if (account.encryption or "").upper() == "SSL" else 587)
     primary_enc = account.encryption or ("SSL" if primary_port == 465 else "TLS")
@@ -92,14 +105,17 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
         (465 if primary_port != 465 else 587, "SSL" if primary_port != 465 else "TLS")
     ]
 
-    last_error = ""
+    last_error_code = "SMTP_CONNECTION_TIMEOUT"
+    last_error_msg = ""
+
     for port, enc in ports_to_try:
+        logger.info(f"[SMTP TRY] Testing account={account.email}, host={account.smtp_host}, port={port}, encryption={enc}")
         try:
             server = create_smtp_server(
                 host=account.smtp_host,
                 port=port,
                 encryption=enc,
-                timeout=6.0
+                timeout=10.0
             )
             server.login(account.smtp_username, decrypted_pw.strip())
             server.quit()
@@ -110,29 +126,77 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
                 account.encryption = enc
 
             status_msg = "Connected"
+            logger.info(f"[SMTP SUCCESS] Authenticated account={account.email}, host={account.smtp_host}:{port} ({enc})")
             account.last_tested_at = datetime.utcnow()
             account.last_test_status = status_msg
             db.commit()
             return {
                 "status": "success",
+                "error_code": None,
                 "message": f"Successfully authenticated with {account.smtp_host}:{port} ({enc})",
                 "last_tested_at": account.last_tested_at.isoformat(),
                 "last_test_status": status_msg
             }
-        except smtplib.SMTPAuthenticationError:
-            status_msg = "Connection Failed: Invalid credentials / auth error (Use Gmail 16-char App Password)"
-            account.last_tested_at = datetime.utcnow()
-            account.last_test_status = status_msg
-            db.commit()
-            return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+        except smtplib.SMTPAuthenticationError as e:
+            last_error_code = "SMTP_AUTH_FAILED"
+            last_error_msg = f"Invalid credentials or App Password required for user '{account.smtp_username}'"
+            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={last_error_msg}")
+            break
+        except (ssl.SSLError if 'ssl' in globals() else Exception) as e:
+            last_error_code = "SMTP_TLS_ERROR"
+            last_error_msg = f"TLS/SSL Handshake Error on {account.smtp_host}:{port} - {str(e)}"
+            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
+        except (socket.gaierror, ConnectionRefusedError, OSError) as e:
+            if "timed out" in str(e).lower() or isinstance(e, socket.timeout):
+                last_error_code = "SMTP_CONNECTION_TIMEOUT"
+                last_error_msg = f"Connection timed out on host {account.smtp_host}:{port}"
+            else:
+                last_error_code = "SMTP_HOST_UNREACHABLE"
+                last_error_msg = f"Host unreachable {account.smtp_host}:{port} - {str(e)}"
+            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
         except Exception as e:
-            last_error = str(e)
+            if "timed out" in str(e).lower() or isinstance(e, TimeoutError):
+                last_error_code = "SMTP_CONNECTION_TIMEOUT"
+                last_error_msg = f"Connection timed out on host {account.smtp_host}:{port}"
+            else:
+                last_error_code = "SMTP_HOST_UNREACHABLE"
+                last_error_msg = str(e)
+            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
 
-    status_msg = f"Connection Failed: {last_error or 'timed out'}"
     account.last_tested_at = datetime.utcnow()
-    account.last_test_status = status_msg
+    account.last_test_status = f"{last_error_code}: {last_error_msg}"
     db.commit()
-    return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+    return {
+        "status": "failed",
+        "error_code": last_error_code,
+        "message": last_error_msg,
+        "last_test_status": f"{last_error_code}: {last_error_msg}"
+    }
+
+
+@router.post("/employee-email/test")
+def test_employee_email_endpoint(
+    employee_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Server-side Test Connection endpoint for employee email configurations.
+    """
+    target_user_id = employee_id or current_user.id
+    target_user = db.query(User).filter(User.id == target_user_id).first()
+    if not target_user:
+        target_user = current_user
+
+    if not target_user or not target_user.email_account:
+        return {
+            "status": "failed",
+            "error_code": "SMTP_CONFIGURATION_ERROR",
+            "message": "Employee has no email account configured."
+        }
+
+    return test_smtp_connection_for_account(target_user.email_account, db)
+
 
 
 
