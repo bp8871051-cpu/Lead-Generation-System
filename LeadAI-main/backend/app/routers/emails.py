@@ -19,8 +19,10 @@ from app.schemas import (
 )
 from app.routers.auth import get_current_user
 from app.services import AILeadAnalyzerService
+from app.brevo_service import BrevoEmailService
 from app.security_utils import decrypt_credential
 from app.config import settings
+
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
@@ -584,9 +586,30 @@ def send_outreach_email(
 
     sent_successfully = False
     last_smtp_error = ""
+    brevo_message_id = None
+
 
     key_clean = smtp_pass.strip() if smtp_pass else ""
-    if key_clean.startswith("re_") or provider_name.upper() == "RESEND":
+
+    # 1. Primary Production Route: Brevo HTTPS API (Port 443)
+    if key_clean.startswith("xkeysib-") or provider_name.upper() == "BREVO" or getattr(settings, "BREVO_API_KEY", "").startswith("xkeysib-"):
+        res = BrevoEmailService.send_transactional_email(
+            sender_name=sender_name,
+            sender_email=sender_email,
+            recipient_email=req.recipient_email,
+            subject=req.subject,
+            html_content=final_body,
+            custom_api_key=key_clean if key_clean.startswith("xkeysib-") else None
+        )
+        if res["status"] == "success":
+            sent_successfully = True
+            brevo_message_id = res.get("message_id")
+            provider_name = "Brevo HTTPS API"
+        else:
+            last_smtp_error = res.get("error_message", "Brevo API delivery failed")
+
+    # 2. Resend HTTP API Route
+    elif key_clean.startswith("re_") or provider_name.upper() == "RESEND":
         try:
             req_data = json.dumps({
                 "from": f"{sender_name} <onboarding@resend.dev>",
@@ -601,27 +624,13 @@ def send_outreach_email(
             )
             with urllib.request.urlopen(http_req, timeout=12) as resp:
                 if resp.status in [200, 201]:
+                    res_j = json.loads(resp.read().decode('utf-8'))
                     sent_successfully = True
+                    brevo_message_id = res_j.get("id")
         except Exception as e:
             last_smtp_error = f"Resend API Error: {str(e)}"
-    elif key_clean.startswith("xkeysib-") or provider_name.upper() == "BREVO":
-        try:
-            req_data = json.dumps({
-                "sender": {"name": sender_name, "email": sender_email},
-                "to": [{"email": req.recipient_email}],
-                "subject": req.subject,
-                "htmlContent": final_body
-            }).encode('utf-8')
-            http_req = urllib.request.Request(
-                "https://api.brevo.com/v3/smtp/email",
-                data=req_data,
-                headers={"api-key": key_clean, "Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(http_req, timeout=12) as resp:
-                if resp.status in [200, 201]:
-                    sent_successfully = True
-        except Exception as e:
-            last_smtp_error = f"Brevo API Error: {str(e)}"
+
+    # 3. Fallback Route for Local Development (SMTP)
     else:
         primary_port = smtp_port or (465 if (encryption or "").upper() == "SSL" else 587)
         primary_enc = encryption or ("SSL" if primary_port == 465 else "TLS")
@@ -653,7 +662,6 @@ def send_outreach_email(
                 last_smtp_error = str(e)
 
 
-
     default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
     if not default_campaign:
         default_campaign = Campaign(name="Direct Outreach", user_id=target_user.id)
@@ -671,12 +679,14 @@ def send_outreach_email(
         recipient_email=req.recipient_email,
         provider=provider_name,
         error_message=last_smtp_error if not sent_successfully else None,
+        provider_message_id=brevo_message_id,
         generated_body=final_body,
         subject=req.subject,
         status=email_status,
         sent_at=datetime.utcnow()
     )
     db.add(new_email)
+
 
     if sent_successfully:
         lead.status = "Contacted"

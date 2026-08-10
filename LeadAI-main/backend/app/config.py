@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     APIFY_API_TOKEN: str = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
+
+
 
     # Server-Side SMTP Email Configuration (Loaded strictly from .env)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.hostinger.com")

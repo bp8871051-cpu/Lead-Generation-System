@@ -31,7 +31,9 @@ migration_queries = [
     "ALTER TABLE emails ADD COLUMN recipient_email VARCHAR",
     "ALTER TABLE emails ADD COLUMN provider VARCHAR",
     "ALTER TABLE emails ADD COLUMN error_message TEXT",
+    "ALTER TABLE emails ADD COLUMN provider_message_id VARCHAR",
     "ALTER TABLE emails ADD COLUMN generated_body TEXT",
+
     "ALTER TABLE emails ADD COLUMN subject VARCHAR",
     "ALTER TABLE emails ADD COLUMN sent_at DATETIME",
     "ALTER TABLE campaigns ADD COLUMN employee_id INTEGER REFERENCES users(id)",

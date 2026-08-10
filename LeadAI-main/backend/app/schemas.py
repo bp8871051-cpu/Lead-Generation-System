@@ -140,7 +140,9 @@ class EmailResponse(BaseModel):
     recipient_email: Optional[str] = None
     provider: Optional[str] = None
     error_message: Optional[str] = None
+    provider_message_id: Optional[str] = None
     generated_body: Optional[str] = None
+
     subject: Optional[str] = None
     status: str
     sent_at: Optional[datetime] = None

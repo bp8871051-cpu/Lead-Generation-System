@@ -208,7 +208,9 @@ class Email(Base):
     recipient_email = Column(String, nullable=True)
     provider = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
+    provider_message_id = Column(String, nullable=True) # Brevo messageId
     generated_body = Column(Text, nullable=True)
+
     subject = Column(String, nullable=True)
     
     # Status: Draft, Generated, Sent, Failed
