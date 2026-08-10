@@ -11,12 +11,15 @@ import { motion } from "framer-motion";
 import { adminService, exportService, authService } from "@/services/api";
 
 const PROVIDER_PRESETS: Record<string, { host: string; port: number; encryption: string; authMethod: string }> = {
-  "Gmail": { host: "smtp.gmail.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
-  "Google Workspace": { host: "smtp.gmail.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
+  "Gmail (App Password - Local/VPS)": { host: "smtp.gmail.com", port: 587, encryption: "TLS", authMethod: "SMTP" },
+  "Resend (HTTP API - Recommended for Render Cloud)": { host: "https://api.resend.com/emails", port: 443, encryption: "SSL", authMethod: "HTTP_API" },
+  "Brevo (HTTP API - Recommended for Render Cloud)": { host: "https://api.brevo.com/v3/smtp/email", port: 443, encryption: "SSL", authMethod: "HTTP_API" },
+  "Google Workspace": { host: "smtp.gmail.com", port: 587, encryption: "TLS", authMethod: "SMTP" },
   "Microsoft 365 / Outlook": { host: "smtp.office365.com", port: 587, encryption: "TLS", authMethod: "SMTP" },
   "Hostinger": { host: "smtp.hostinger.com", port: 465, encryption: "SSL", authMethod: "SMTP" },
   "Custom SMTP": { host: "", port: 587, encryption: "TLS", authMethod: "SMTP" }
 };
+
 
 
 export default function SettingsPage() {
