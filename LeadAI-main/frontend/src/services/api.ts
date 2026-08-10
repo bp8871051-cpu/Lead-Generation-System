@@ -14,7 +14,7 @@ class ApiClient {
     return headers;
   }
 
-  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async request<T>(endpoint: string, options: RequestInit = {}, retries: number = 2): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     const headers = { ...this.getHeaders(), ...options.headers };
     
@@ -44,12 +44,17 @@ class ApiClient {
       }
       return data as T;
     } catch (error: any) {
+      if (retries > 0 && (error?.name === "TypeError" || error?.message === "Failed to fetch")) {
+        await new Promise((res) => setTimeout(res, 1500));
+        return this.request<T>(endpoint, options, retries - 1);
+      }
       if (error?.name === "TypeError" || error?.message === "Failed to fetch") {
-        throw new Error(`Unable to connect to backend server. Please make sure the FastAPI backend is running on ${API_BASE_URL}.`);
+        throw new Error(`Unable to connect to backend server. Render backend server is warming up, please refresh in a few seconds.`);
       }
       throw error;
     }
   }
+
 
   get<T>(endpoint: string, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: "GET" });
