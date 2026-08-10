@@ -56,13 +56,15 @@ export default function SettingsPage() {
 
   // Employee Email Account Modal State
   const [editingEmailEmployee, setEditingEmailEmployee] = useState<any | null>(null);
+  const [removingEmailEmployee, setRemovingEmailEmployee] = useState<any | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [emailForm, setEmailForm] = useState({
     email: "",
-    provider: "Hostinger",
-    authentication_method: "SMTP",
-    smtp_host: "smtp.hostinger.com",
-    smtp_port: 465,
-    encryption: "SSL",
+    provider: "Brevo (Transactional API)",
+    authentication_method: "API_KEY",
+    smtp_host: "api.brevo.com",
+    smtp_port: 443,
+    encryption: "HTTPS",
     smtp_username: "",
     password: "",
     sender_name: "",
@@ -70,6 +72,7 @@ export default function SettingsPage() {
     is_default: false
   });
   const [savingEmailConfig, setSavingEmailConfig] = useState(false);
+
 
   // Testing Connection States
   const [testingConnectionId, setTestingConnectionId] = useState<number | null>(null);
@@ -218,18 +221,25 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteEmailAccount = async (empId: number) => {
-    if (!confirm("Are you sure you want to remove this employee's email configuration?")) return;
+  const confirmRemoveEmailAccount = async () => {
+    if (!removingEmailEmployee) return;
+    setDeletingAccount(true);
     try {
-      await adminService.deleteEmployeeEmailAccount(empId);
-      setEditingEmailEmployee(null);
+      await adminService.deleteEmployeeEmailAccount(removingEmailEmployee.id);
+      setRemovingEmailEmployee(null);
       const updatedEmps = await adminService.getEmployees();
       setEmployees(updatedEmps);
-      setFeedback({ type: "success", message: "Email configuration removed." });
+      const smtp = await adminService.getSmtpStatus();
+      setSmtpStatus(smtp);
+      setFeedback({ type: "success", message: "Email account removed successfully." });
+      setTimeout(() => setFeedback(null), 3500);
     } catch (err: any) {
-      setFeedback({ type: "error", message: err.message || "Failed to delete email configuration." });
+      setFeedback({ type: "error", message: err.message || "Failed to remove email account." });
+    } finally {
+      setDeletingAccount(false);
     }
   };
+
 
   const handleTestConnection = async (empId: number) => {
     setTestingConnectionId(empId);
@@ -487,14 +497,17 @@ export default function SettingsPage() {
       {/* 2. EMPLOYEES & EMAIL CONFIGURATION TAB */}
       {activeTab === "employees" && (
         <div className="space-y-6">
-          <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-4">
+          <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-xs font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
                   <Users className="w-4 h-4 text-primary" /> Company Employee & Email Account Management
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Active Employees: <strong className="text-emerald-400">{activeEmployeeCount} / 5 Maximum</strong>. Each employee can have their own sending email account.
+                  Active Employees: <strong className="text-emerald-400">{activeEmployeeCount} / 5</strong>
+                  <span className="text-slate-500 ml-2">
+                    ({activeEmployeeCount >= 5 ? "Maximum 5 employees reached." : `${5 - activeEmployeeCount} employee slot${5 - activeEmployeeCount === 1 ? '' : 's'} remaining`})
+                  </span>
                 </p>
               </div>
 
@@ -502,7 +515,7 @@ export default function SettingsPage() {
                 <button
                   onClick={() => setShowAddEmployeeModal(true)}
                   disabled={activeEmployeeCount >= 5}
-                  className="px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-primary/20"
+                  className="px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-primary/20 transition-all"
                 >
                   <UserPlus className="w-4 h-4" /> Add Employee Account
                 </button>
@@ -510,9 +523,9 @@ export default function SettingsPage() {
             </div>
 
             {activeEmployeeCount >= 5 && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl font-bold flex items-center gap-2">
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl font-bold flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Maximum 5 active employees allowed in this company installation.</span>
+                <span>Maximum 5 active employees reached. You cannot add more employee slots.</span>
               </div>
             )}
 
@@ -521,11 +534,12 @@ export default function SettingsPage() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-3">Employee</th>
-                    <th className="py-3 px-3">Role</th>
-                    <th className="py-3 px-3">Sending Email Account</th>
-                    <th className="py-3 px-3">Connection Status</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
+                    <th className="py-3 px-3">EMPLOYEE</th>
+                    <th className="py-3 px-3">ROLE</th>
+                    <th className="py-3 px-3">SENDING EMAIL ACCOUNT</th>
+                    <th className="py-3 px-3">CONNECTION STATUS</th>
+                    <th className="py-3 px-3">LAST TESTED</th>
+                    <th className="py-3 px-3 text-right">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -539,14 +553,24 @@ export default function SettingsPage() {
                       acct.last_test_status.includes("timed out")
                     );
 
+                    const formattedLastTested = acct?.last_tested_at
+                      ? new Date(acct.last_tested_at).toLocaleString([], {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : "Never";
+
                     return (
-                      <tr key={emp.id} className="hover:bg-slate-900/50">
+                      <tr key={emp.id} className="hover:bg-slate-900/50 transition-all">
                         <td className="py-3.5 px-3">
                           <div className="font-bold text-white">{emp.full_name || emp.email}</div>
                           <div className="text-[10px] text-slate-400">{emp.email}</div>
                         </td>
                         <td className="py-3.5 px-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
                             emp.role === "admin" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
                           }`}>
                             {emp.role.toUpperCase()}
@@ -556,7 +580,7 @@ export default function SettingsPage() {
                           {acct ? (
                             <div>
                               <div className="font-mono text-white text-[11px] font-bold">{acct.email}</div>
-                              <div className="text-[9px] text-slate-400">{acct.provider || "Custom SMTP"} ({acct.smtp_host}:{acct.smtp_port})</div>
+                              <div className="text-[9px] text-slate-400 font-semibold">{acct.provider || "Brevo (Transactional API)"}</div>
                             </div>
                           ) : (
                             <span className="text-[10px] text-slate-500 italic">Not Configured</span>
@@ -564,57 +588,75 @@ export default function SettingsPage() {
                         </td>
                         <td className="py-3.5 px-3">
                           {acct ? (
-                            <div>
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 ${
-                                isConnected
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : isFailed
-                                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                  : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
-                              }`}>
-                                <Check className="w-3 h-3" />
-                                {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured (Not Tested)")}
-                              </span>
-
-                              {acct.last_tested_at && (
-                                <div className="text-[9px] text-slate-500 mt-0.5">
-                                  Last tested: {new Date(acct.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              )}
-                            </div>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 ${
+                              isConnected
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : isFailed
+                                ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
+                            }`}>
+                              <Check className="w-3 h-3" />
+                              {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured")}
+                            </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800 text-slate-400">
                               No Config
                             </span>
                           )}
                         </td>
+                        <td className="py-3.5 px-3">
+                          <div className="text-[10px] text-slate-300 font-mono">
+                            {formattedLastTested}
+                          </div>
+                        </td>
                         <td className="py-3.5 px-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {acct && (
+                            {acct ? (
+                              <>
+                                <button
+                                  onClick={() => handleTestConnection(emp.id)}
+                                  disabled={isTesting}
+                                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                                  title="Test Connection"
+                                >
+                                  {isTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 text-emerald-400" />}
+                                  {isTesting ? "Testing..." : "Test Connection"}
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenEmailModal(emp)}
+                                  className="px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary-light border border-primary/20 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                  title="Edit Email Configuration"
+                                >
+                                  <Settings2 className="w-3 h-3" /> Edit Email
+                                </button>
+
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => setRemovingEmailEmployee(emp)}
+                                    className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                    title="Remove Email Account Configuration"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Remove
+                                  </button>
+                                )}
+                              </>
+                            ) : (
                               <button
-                                onClick={() => handleTestConnection(emp.id)}
-                                disabled={isTesting}
-                                className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                                onClick={() => handleOpenEmailModal(emp)}
+                                className="px-2.5 py-1 bg-primary hover:bg-primary-dark text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all shadow-md shadow-primary/20"
                               >
-                                {isTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 text-emerald-400" />}
-                                {isTesting ? "Testing..." : "Test"}
+                                <Mail className="w-3 h-3" /> Configure Email
                               </button>
                             )}
-
-                            <button
-                              onClick={() => handleOpenEmailModal(emp)}
-                              className="px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary-light border border-primary/20 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-                            >
-                              <Settings2 className="w-3 h-3" />
-                              {acct ? "Edit Email" : "Configure Email"}
-                            </button>
 
                             {isAdmin && emp.role !== "admin" && (
                               <button
                                 onClick={() => handleToggleActive(emp.id)}
                                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                                  emp.is_active ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                                  emp.is_active ? "bg-slate-800 text-slate-400 hover:bg-slate-700" : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                                 }`}
+                                title={emp.is_active ? "Deactivate Employee" : "Activate Employee"}
                               >
                                 {emp.is_active ? "Deactivate" : "Activate"}
                               </button>
@@ -628,6 +670,22 @@ export default function SettingsPage() {
               </table>
             </div>
           </div>
+
+          {/* Security Information Card */}
+          <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                SECURE & ENCRYPTED
+              </h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Email credentials and provider configuration are securely stored and are never exposed to the frontend.
+              </p>
+            </div>
+          </div>
+
 
           {/* Add Employee Account Modal */}
           {showAddEmployeeModal && (
@@ -859,7 +917,11 @@ export default function SettingsPage() {
                     {editingEmailEmployee.email_account ? (
                       <button
                         type="button"
-                        onClick={() => handleDeleteEmailAccount(editingEmailEmployee.id)}
+                        onClick={() => {
+                          const emp = editingEmailEmployee;
+                          setEditingEmailEmployee(null);
+                          setRemovingEmailEmployee(emp);
+                        }}
                         className="px-3 py-1.5 text-rose-400 hover:bg-rose-500/10 font-bold rounded-lg transition-colors flex items-center gap-1 text-[11px]"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Delete Configuration
@@ -889,8 +951,56 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {/* REMOVE EMAIL ACCOUNT CONFIRMATION MODAL */}
+          {removingEmailEmployee && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 font-sans shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                    <Trash2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-base">Remove Email Account?</h3>
+                    <p className="text-[11px] text-slate-400">Deconfigure employee sending address</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950 border border-slate-800/80 rounded-2xl space-y-2 text-xs">
+                  <p className="text-slate-300">
+                    Are you sure you want to remove <strong className="text-white font-mono">{removingEmailEmployee.email_account?.email}</strong> from <strong className="text-white">{removingEmailEmployee.full_name || removingEmailEmployee.email}</strong>?
+                  </p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    This employee will no longer be able to send campaign emails using this account. This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setRemovingEmailEmployee(null)}
+                    disabled={deletingAccount}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={confirmRemoveEmailAccount}
+                    disabled={deletingAccount}
+                    className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-rose-600/20 transition-all disabled:opacity-50"
+                  >
+                    {deletingAccount ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Remove Account
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
 
       {/* 3. SMTP STATUS TAB */}
       {activeTab === "smtp" && (
