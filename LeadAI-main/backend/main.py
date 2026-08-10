@@ -25,9 +25,14 @@ migration_queries = [
     "ALTER TABLE notes ADD COLUMN user_id INTEGER REFERENCES users(id)",
     "ALTER TABLE tasks ADD COLUMN assigned_to_user_id INTEGER REFERENCES users(id)",
     "ALTER TABLE emails ADD COLUMN sender_id INTEGER REFERENCES users(id)",
+    "ALTER TABLE emails ADD COLUMN sender_email VARCHAR",
+    "ALTER TABLE emails ADD COLUMN recipient_email VARCHAR",
+    "ALTER TABLE emails ADD COLUMN provider VARCHAR",
+    "ALTER TABLE emails ADD COLUMN error_message TEXT",
     "ALTER TABLE emails ADD COLUMN generated_body TEXT",
     "ALTER TABLE emails ADD COLUMN subject VARCHAR",
     "ALTER TABLE emails ADD COLUMN sent_at DATETIME",
+    "ALTER TABLE campaigns ADD COLUMN employee_id INTEGER REFERENCES users(id)",
     "ALTER TABLE company ADD COLUMN brand_name VARCHAR DEFAULT 'BLUEBOXX.DA'",
     "ALTER TABLE company ADD COLUMN tagline VARCHAR DEFAULT 'Turning Ideas Into Digital Excellence'",
     "ALTER TABLE company ADD COLUMN city VARCHAR DEFAULT 'Ahmedabad'",
@@ -44,6 +49,7 @@ migration_queries = [
     "ALTER TABLE company ADD COLUMN whatsapp_number VARCHAR DEFAULT '+91 98765 43210'",
     "ALTER TABLE company ADD COLUMN services_list TEXT"
 ]
+
 
 for q in migration_queries:
     try:

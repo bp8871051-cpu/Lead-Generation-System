@@ -2,22 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
 import socket
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from app.database import get_db
-from app.models import User, Business, Company, Lead, Campaign, Email, ActivityLog
-from app.schemas import CampaignCreate, CampaignResponse, EmailGenerateRequest, EmailResponse
+from app.models import User, Business, Company, Lead, Campaign, Email, ActivityLog, EmployeeEmailAccount
+from app.schemas import (
+    CampaignCreate, CampaignResponse, EmailGenerateRequest, EmailResponse,
+    EmailSendRequest, ActiveSenderResponse
+)
 from app.routers.auth import get_current_user
 from app.services import AILeadAnalyzerService
+from app.security_utils import decrypt_credential
 from app.config import settings
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
-def create_smtp_server(host: str, port: int, timeout: float = 12.0):
+def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 12.0):
     """
     Creates an SMTP or SMTP_SSL connection enforcing IPv4 socket resolution.
     This prevents [Errno 101] Network is unreachable errors on cloud platforms like Render/Docker.
@@ -29,24 +32,75 @@ def create_smtp_server(host: str, port: int, timeout: float = 12.0):
 
     socket.getaddrinfo = ipv4_getaddrinfo
     try:
-        if port == 465:
-            server = smtplib.SMTP_SSL(host, 465, timeout=timeout)
+        enc_upper = (encryption or "TLS").upper()
+        if port == 465 or enc_upper == "SSL":
+            server = smtplib.SMTP_SSL(host, port or 465, timeout=timeout)
         else:
-            server = smtplib.SMTP(host, port, timeout=timeout)
+            server = smtplib.SMTP(host, port or 587, timeout=timeout)
             server.ehlo()
-            server.starttls()
-            server.ehlo()
+            if enc_upper != "NONE":
+                server.starttls()
+                server.ehlo()
         return server
     finally:
         socket.getaddrinfo = orig_getaddrinfo
 
 
+def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session) -> dict:
+    """
+    Validates credentials by attempting a real SMTP connection for a specific employee email account.
+    """
+    if not account or not account.smtp_host or not account.smtp_username:
+        status_msg = "Connection Failed: Missing host or username configuration"
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = status_msg
+        db.commit()
+        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+
+    decrypted_pw = decrypt_credential(account.encrypted_smtp_password or "")
+    if not decrypted_pw:
+        status_msg = "Connection Failed: Password not configured"
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = status_msg
+        db.commit()
+        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+
+    try:
+        server = create_smtp_server(
+            host=account.smtp_host,
+            port=account.smtp_port or 587,
+            encryption=account.encryption or "TLS",
+            timeout=8.0
+        )
+        server.login(account.smtp_username, decrypted_pw.strip())
+        server.quit()
+
+        status_msg = "Connected"
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = status_msg
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Successfully authenticated with {account.smtp_host}",
+            "last_tested_at": account.last_tested_at.isoformat(),
+            "last_test_status": status_msg
+        }
+    except smtplib.SMTPAuthenticationError:
+        status_msg = "Connection Failed: Invalid credentials / authentication failed"
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = status_msg
+        db.commit()
+        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+    except Exception as e:
+        status_msg = f"Connection Failed: {str(e)}"
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = status_msg
+        db.commit()
+        return {"status": "failed", "message": status_msg, "last_test_status": status_msg}
+
+
 def generate_html_email_footer(user: User, company: Company) -> str:
-    # Resolve company fields with BLUEBOXX.DA PRIVATE LIMITED fallbacks
     comp_name = company.company_name or "BLUEBOXX.DA PRIVATE LIMITED"
-    brand_name = getattr(company, "brand_name", None) or "BLUEBOXX.DA"
-    tagline = getattr(company, "tagline", None) or "Turning Ideas Into Digital Excellence"
-    logo_path = company.company_logo or "/blueboxx_logo.png"
     website = company.company_website or "https://blueboxxda.com"
     support_email = company.support_email or company.company_email or "contact@blueboxxda.com"
     phone = company.company_phone or "+91 98765 43210"
@@ -60,7 +114,8 @@ def generate_html_email_footer(user: User, company: Company) -> str:
     cin = getattr(company, "cin_number", None) or "U72900GJ2026PTC123456"
     hours = getattr(company, "working_hours", None) or "Mon - Sat: 9:00 AM - 7:00 PM IST"
     
-    # Social links
+    sender_display_name = user.full_name or user.email
+
     social_items = []
     if getattr(company, "linkedin_url", None):
         social_items.append(f'<a href="{company.linkedin_url}" style="color: #1E40AF; font-weight: 700; text-decoration: none;">LinkedIn</a>')
@@ -70,35 +125,23 @@ def generate_html_email_footer(user: User, company: Company) -> str:
         social_items.append(f'<a href="{company.facebook_url}" style="color: #1D4ED8; font-weight: 700; text-decoration: none;">Facebook</a>')
     if getattr(company, "youtube_url", None):
         social_items.append(f'<a href="{company.youtube_url}" style="color: #DC2626; font-weight: 700; text-decoration: none;">YouTube</a>')
-    if getattr(company, "behance_url", None):
-        social_items.append(f'<a href="{company.behance_url}" style="color: #2563EB; font-weight: 700; text-decoration: none;">Behance</a>')
-    if getattr(company, "dribbble_url", None):
-        social_items.append(f'<a href="{company.dribbble_url}" style="color: #EA4C89; font-weight: 700; text-decoration: none;">Dribbble</a>')
-    if getattr(company, "twitter_url", None):
-        social_items.append(f'<a href="{company.twitter_url}" style="color: #0F172A; font-weight: 700; text-decoration: none;">X (Twitter)</a>')
-    if getattr(company, "whatsapp_number", None):
-        wa_num = company.whatsapp_number.replace(" ", "").replace("+", "")
-        social_items.append(f'<a href="https://wa.me/{wa_num}" style="color: #16A34A; font-weight: 700; text-decoration: none;">WhatsApp Business</a>')
 
-    social_html = " &nbsp;&bull;&nbsp; ".join(social_items) if social_items else '<a href="https://blueboxxda.com" style="color: #1E40AF; font-weight: 700; text-decoration: none;">Official Website</a>'
+    social_html = " &nbsp;&bull;&nbsp; ".join(social_items) if social_items else f'<a href="{website}" style="color: #1E40AF; font-weight: 700; text-decoration: none;">Official Website</a>'
 
-    # Official Company Services Grid
-    raw_services = getattr(company, "services_list", None) or "Website Development, Web Applications, UI / UX Design, Graphic Design, Logo Design, Branding, Motion Graphics, Animation, Video Editing, Digital Marketing, SEO, Social Media Marketing, Lead Generation, CRM Development, Automation Solutions"
+    raw_services = getattr(company, "services_list", None) or "Website Development, Web Applications, UI / UX Design, Graphic Design, Logo Design, Branding, Digital Marketing, SEO, Lead Generation, Automation Solutions"
     services_arr = [s.strip() for s in raw_services.split(",") if s.strip()]
     services_pills = "".join([f'<td style="padding: 4px 8px; margin: 3px; background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 11px; font-weight: 700; color: #1E293B; display: inline-block;">✓ {s}</td>' for s in services_arr])
 
     return f"""
     <div style="font-family: 'Segoe UI', Arial, Helvetica, sans-serif; max-width: 650px; margin-top: 35px; border-top: 3px solid #0F172A; background-color: #FFFFFF; border-radius: 0 0 12px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); padding: 24px; color: #0F172A;">
       
-      <!-- CEO & Founder Signoff with Company Name & Website URL -->
       <div style="font-size: 14px; color: #334155; margin-bottom: 20px; line-height: 1.6; border-bottom: 2px solid #E2E8F0; padding-bottom: 16px;">
         Regards,<br/>
-        <strong style="color: #0F172A; font-size: 15px; font-weight: 800;">CEO & Founder</strong><br/>
+        <strong style="color: #0F172A; font-size: 15px; font-weight: 800;">{sender_display_name}</strong><br/>
         <span style="color: #2563EB; font-weight: 900; font-size: 16px; letter-spacing: 0.5px;">{comp_name}</span><br/>
         <a href="{website}" style="color: #0F172A; text-decoration: none; font-size: 12.5px; font-weight: 700; display: inline-block; margin-top: 4px;">🌐 {website}</a>
       </div>
 
-      <!-- Company Contact Details Grid -->
       <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #475569; margin-bottom: 20px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px;">
         <tr>
           <td style="padding: 10px 14px; vertical-align: top;">
@@ -110,7 +153,6 @@ def generate_html_email_footer(user: User, company: Company) -> str:
         </tr>
       </table>
 
-      <!-- Our Services Section -->
       <div style="margin-bottom: 20px;">
         <div style="font-size: 12px; font-weight: 900; color: #0F172A; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Our Enterprise Digital Services</div>
         <div style="line-height: 1.8;">
@@ -118,29 +160,55 @@ def generate_html_email_footer(user: User, company: Company) -> str:
         </div>
       </div>
 
-      <!-- Social Media Links -->
       <div style="margin-bottom: 20px; padding: 12px 14px; background-color: #F1F5F9; border-radius: 8px; text-align: center; font-size: 12px;">
         <span style="font-weight: 800; color: #0F172A; margin-right: 8px; text-transform: uppercase; font-size: 10.5px; tracking: 1px;">Connect With Us:</span>
         {social_html}
       </div>
 
-      <!-- Footer & Legal Disclaimer -->
       <div style="border-top: 1px solid #E2E8F0; padding-top: 16px; font-size: 11px; color: #64748B; line-height: 1.6;">
         <div style="font-weight: 700; color: #334155; margin-bottom: 6px;">
           &copy; 2026 {comp_name}. All Rights Reserved.
         </div>
         <div style="margin-bottom: 8px; font-style: italic; font-size: 10.5px; color: #94A3B8;">
-          CONFIDENTIALITY NOTICE: This email and any attachments are confidential and intended solely for the use of the individual or entity to whom they are addressed. If you have received this communication in error, please notify {comp_name} immediately and delete all copies.
-        </div>
-        <div>
-          <a href="{website}" style="color: #2563EB; text-decoration: none; font-weight: 600;">Company Website</a> &nbsp;&bull;&nbsp; 
-          <a href="{website}/privacy" style="color: #2563EB; text-decoration: none; font-weight: 600;">Privacy Policy</a> &nbsp;&bull;&nbsp; 
-          <a href="{website}/terms" style="color: #2563EB; text-decoration: none; font-weight: 600;">Terms & Conditions</a>
+          CONFIDENTIALITY NOTICE: This email and any attachments are confidential and intended solely for the use of the individual or entity to whom they are addressed.
         </div>
       </div>
 
     </div>
     """
+
+
+@router.get("/active-senders", response_model=List[ActiveSenderResponse])
+def list_active_email_senders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns only active employees who have a configured email account.
+    Used for the Campaign / Outreach 'Send From' dropdown.
+    """
+    users_with_accounts = (
+        db.query(User)
+        .join(EmployeeEmailAccount, User.id == EmployeeEmailAccount.employee_id)
+        .filter(User.is_active == True, EmployeeEmailAccount.is_active == True)
+        .all()
+    )
+
+    results = []
+    for u in users_with_accounts:
+        acct = u.email_account
+        if acct and acct.email:
+            results.append({
+                "employee_id": u.id,
+                "employee_name": u.full_name or u.email,
+                "email": acct.email,
+                "sender_name": acct.sender_name or u.full_name or u.email,
+                "provider": acct.provider or "Custom SMTP",
+                "is_active": acct.is_active,
+                "last_test_status": acct.last_test_status
+            })
+    return results
+
 
 @router.post("/campaigns", response_model=CampaignResponse)
 def create_campaign(
@@ -148,31 +216,34 @@ def create_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    target_emp_id = campaign_in.employee_id or current_user.id
     campaign = Campaign(
         name=campaign_in.name,
         subject=campaign_in.subject,
         body_template=campaign_in.body_template,
         status="Draft",
-        user_id=current_user.id
+        user_id=target_emp_id
     )
     db.add(campaign)
     
     log = ActivityLog(
         user_id=current_user.id,
         action="CAMPAIGN_CREATE",
-        description=f"Created email campaign '{campaign_in.name}'"
+        description=f"Created email campaign '{campaign_in.name}' for employee ID {target_emp_id}"
     )
     db.add(log)
     db.commit()
     db.refresh(campaign)
     return campaign
 
+
 @router.get("/campaigns", response_model=List[CampaignResponse])
 def get_campaigns(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Campaign).filter(Campaign.user_id == current_user.id).order_by(Campaign.created_at.desc()).all()
+    return db.query(Campaign).order_by(Campaign.created_at.desc()).all()
+
 
 def _resolve_lead(lead_id: int, db: Session, current_user: User) -> Lead:
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
@@ -194,6 +265,7 @@ def _resolve_lead(lead_id: int, db: Session, current_user: User) -> Lead:
         db.refresh(new_lead)
         return new_lead
     raise HTTPException(status_code=404, detail="Lead profile not found")
+
 
 @router.post("/generate-draft", response_model=EmailResponse)
 def generate_draft(
@@ -221,7 +293,7 @@ def generate_draft(
         details=details
     )
     
-    default_campaign = db.query(Campaign).filter(Campaign.user_id == current_user.id, Campaign.name == "Direct Outreach").first()
+    default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
     if not default_campaign:
         default_campaign = Campaign(name="Direct Outreach", user_id=current_user.id)
         db.add(default_campaign)
@@ -232,6 +304,8 @@ def generate_draft(
         campaign_id=default_campaign.id,
         lead_id=lead.id,
         sender_id=current_user.id,
+        sender_email=current_user.email,
+        recipient_email=lead.business.email or "",
         generated_body=generated_text,
         subject=f"Outreach Opportunity for {lead.business.name}",
         status="Draft"
@@ -248,6 +322,7 @@ def generate_draft(
     db.refresh(new_email)
     return new_email
 
+
 @router.get("/lead/{lead_id}/drafts", response_model=List[EmailResponse])
 def get_lead_drafts(
     lead_id: int,
@@ -257,11 +332,6 @@ def get_lead_drafts(
     lead = _resolve_lead(lead_id, db, current_user)
     return db.query(Email).filter(Email.lead_id == lead.id).order_by(Email.created_at.desc()).all()
 
-class EmailSendRequest(BaseModel):
-    lead_id: int
-    subject: str
-    body: str
-    recipient_email: str
 
 @router.post("/send")
 def send_outreach_email(
@@ -269,96 +339,129 @@ def send_outreach_email(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Sends an outreach email dynamically using the selected employee's authenticated email account.
+    """
     lead = _resolve_lead(req.lead_id, db, current_user)
 
     company = db.query(Company).first()
     if not company:
         company = Company()
 
-    # Automatically ensure HTML Email Signature is attached if not present
-    final_body = req.body
-    if "table" not in final_body.lower() and company.company_name not in final_body:
-        footer_html = generate_html_email_footer(current_user, company)
-        final_body = f"{final_body}<br/>{footer_html}"
-
-    smtp_user = settings.SMTP_USER
-    smtp_password = settings.SMTP_PASS
-    smtp_host = settings.SMTP_HOST
-    smtp_port = settings.SMTP_PORT
-    sender = settings.EMAIL_FROM or smtp_user
-
-    if not smtp_user or not smtp_password:
+    # Determine sender employee
+    target_emp_id = req.employee_id or current_user.id
+    target_user = db.query(User).filter(User.id == target_emp_id, User.is_active == True).first()
+    if not target_user:
         raise HTTPException(
             status_code=400,
-            detail="SMTP credentials (SMTP_USER/SMTP_PASS) are not configured in backend settings or .env file."
+            detail=f"Selected employee (ID: {target_emp_id}) is inactive or does not exist."
         )
 
-    # Attempt to send email via SMTP with fallback port support
+    # Load Employee's Email Account
+    email_account = target_user.email_account
+    
+    # Check if configured
+    if not email_account or not email_account.is_active or not email_account.smtp_host or not email_account.smtp_username:
+        # Fallback ONLY if current_user doesn't have an account and global .env is populated
+        if settings.SMTP_USER and settings.SMTP_PASS and not req.employee_id:
+            # Temporary fallback for unconfigured single admin user
+            sender_email = settings.EMAIL_FROM or settings.SMTP_USER
+            provider_name = "Global ENV SMTP"
+            smtp_host = settings.SMTP_HOST
+            smtp_port = settings.SMTP_PORT
+            smtp_user = settings.SMTP_USER
+            smtp_pass = settings.SMTP_PASS
+            encryption = "TLS"
+            sender_name = settings.DEFAULT_SENDER_NAME or target_user.full_name or "BLUEBOXX Team"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No verified sending email account is available for employee '{target_user.full_name or target_user.email}'. Configure an employee email account first."
+            )
+    else:
+        sender_email = email_account.email
+        provider_name = email_account.provider or "Employee SMTP"
+        smtp_host = email_account.smtp_host
+        smtp_port = email_account.smtp_port or 587
+        smtp_user = email_account.smtp_username
+        smtp_pass = decrypt_credential(email_account.encrypted_smtp_password or "")
+        encryption = email_account.encryption or "TLS"
+        sender_name = email_account.sender_name or target_user.full_name or target_user.email
+
+    if not smtp_pass:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid or missing password for employee account '{sender_email}'. Please test connection & re-enter password."
+        )
+
+    # Attach HTML footer signoff
+    final_body = req.body
+    if "table" not in final_body.lower() and company.company_name not in final_body:
+        footer_html = generate_html_email_footer(target_user, company)
+        final_body = f"{final_body}<br/>{footer_html}"
+
     sent_successfully = False
     last_smtp_error = ""
 
-    # Build ports to try: primary first, fallback second
-    ports_to_try = [smtp_port]
-    if smtp_port == 587 and 465 not in ports_to_try:
-        ports_to_try.append(465)
-    elif smtp_port == 465 and 587 not in ports_to_try:
-        ports_to_try.append(587)
+    try:
+        msg = MIMEMultipart('alternative')
+        from_formatted = f"{sender_name} <{sender_email}>"
+        msg['From'] = from_formatted
+        msg['To'] = req.recipient_email
+        msg['Subject'] = req.subject
+        msg.attach(MIMEText(final_body, 'html'))
 
-    for port in ports_to_try:
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['From'] = sender
-            msg['To'] = req.recipient_email
-            msg['Subject'] = req.subject
-            msg.attach(MIMEText(final_body, 'html'))
+        server = create_smtp_server(smtp_host, smtp_port, encryption=encryption, timeout=10.0)
+        server.login(smtp_user, smtp_pass.strip())
+        server.sendmail(sender_email, req.recipient_email, msg.as_string())
+        server.quit()
+        sent_successfully = True
+    except smtplib.SMTPAuthenticationError:
+        last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'"
+    except Exception as e:
+        last_smtp_error = str(e)
 
-            server = create_smtp_server(smtp_host, port, timeout=12.0)
-            server.login(smtp_user, smtp_password.strip())
-            server.sendmail(sender, req.recipient_email, msg.as_string())
-            server.quit()
-            sent_successfully = True
-            break
-        except smtplib.SMTPAuthenticationError:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"SMTP Authentication failed for user '{smtp_user}'. Please verify SMTP_USER & SMTP_PASS in backend settings."
-            )
-        except Exception as e:
-            last_smtp_error = str(e)
-
-    if not sent_successfully:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send email via SMTP ({smtp_host}): {last_smtp_error or 'Connection failed'}"
-        )
-
-    lead.status = "Contacted"
-    
-    default_campaign = db.query(Campaign).filter(Campaign.user_id == current_user.id, Campaign.name == "Direct Outreach").first()
+    default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
     if not default_campaign:
-        default_campaign = Campaign(name="Direct Outreach", user_id=current_user.id)
+        default_campaign = Campaign(name="Direct Outreach", user_id=target_user.id)
         db.add(default_campaign)
         db.commit()
         db.refresh(default_campaign)
         
+    email_status = "Sent" if sent_successfully else "Failed"
+
     new_email = Email(
         campaign_id=default_campaign.id,
         lead_id=req.lead_id,
-        sender_id=current_user.id,
+        sender_id=target_user.id,
+        sender_email=sender_email,
+        recipient_email=req.recipient_email,
+        provider=provider_name,
+        error_message=last_smtp_error if not sent_successfully else None,
         generated_body=final_body,
         subject=req.subject,
-        status="Sent",
+        status=email_status,
         sent_at=datetime.utcnow()
     )
     db.add(new_email)
 
-    log = ActivityLog(
-        user_id=current_user.id,
-        action="EMAIL_SENT",
-        description=f"Sent outreach to '{req.recipient_email}' for lead '{lead.business.name}'"
-    )
-    db.add(log)
-    db.commit()
-
-    return {"status": "success", "message": f"Email successfully sent to {req.recipient_email}"}
-
+    if sent_successfully:
+        lead.status = "Contacted"
+        log = ActivityLog(
+            user_id=target_user.id,
+            action="EMAIL_SENT",
+            description=f"Sent outreach from '{sender_email}' to '{req.recipient_email}' for lead '{lead.business.name}'"
+        )
+        db.add(log)
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Email successfully sent from {sender_email} to {req.recipient_email}",
+            "sender_email": sender_email
+        }
+    else:
+        db.commit()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send email using account '{sender_email}' via {smtp_host}: {last_smtp_error or 'Connection timed out'}"
+        )

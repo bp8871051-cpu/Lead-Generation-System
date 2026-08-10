@@ -40,15 +40,115 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+# Employee Email Account Schemas
+class EmployeeEmailAccountBase(BaseModel):
+    email: EmailStr
+    provider: Optional[str] = "Custom SMTP"
+    authentication_method: Optional[str] = "SMTP"
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = 587
+    encryption: Optional[str] = "TLS"
+    smtp_username: Optional[str] = None
+    sender_name: Optional[str] = None
+    is_active: Optional[bool] = True
+    is_default: Optional[bool] = False
+
+class EmployeeEmailAccountCreate(EmployeeEmailAccountBase):
+    password: Optional[str] = None
+
+class EmployeeEmailAccountUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    provider: Optional[str] = None
+    authentication_method: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    encryption: Optional[str] = None
+    smtp_username: Optional[str] = None
+    password: Optional[str] = None
+    sender_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
+
+class EmployeeEmailAccountResponse(EmployeeEmailAccountBase):
+    id: int
+    employee_id: int
+    has_password: bool = False
+    last_tested_at: Optional[datetime] = None
+    last_test_status: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ActiveSenderResponse(BaseModel):
+    employee_id: int
+    employee_name: str
+    email: str
+    sender_name: Optional[str] = None
+    provider: str
+    is_active: bool
+    last_test_status: Optional[str] = None
+
 class UserResponse(UserBase):
     id: int
     role: str
     is_active: bool
     last_login: Optional[datetime] = None
     created_at: datetime
+    email_account: Optional[EmployeeEmailAccountResponse] = None
 
     class Config:
         from_attributes = True
+
+# Campaign & Email Schemas
+class CampaignCreate(BaseModel):
+    name: str
+    subject: Optional[str] = None
+    body_template: Optional[str] = None
+    employee_id: Optional[int] = None
+
+class CampaignResponse(BaseModel):
+    id: int
+    name: str
+    subject: Optional[str] = None
+    body_template: Optional[str] = None
+    status: str
+    created_at: datetime
+    employee_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class EmailGenerateRequest(BaseModel):
+    lead_id: int
+    channel: str # Email, LinkedIn, WhatsApp, Follow-up, Proposal
+
+class EmailSendRequest(BaseModel):
+    lead_id: int
+    subject: str
+    body: str
+    recipient_email: str
+    employee_id: Optional[int] = None
+
+class EmailResponse(BaseModel):
+    id: int
+    campaign_id: Optional[int] = None
+    lead_id: int
+    sender_id: Optional[int] = None
+    sender_email: Optional[str] = None
+    recipient_email: Optional[str] = None
+    provider: Optional[str] = None
+    error_message: Optional[str] = None
+    generated_body: Optional[str] = None
+    subject: Optional[str] = None
+    status: str
+    sent_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 
 # Company Profile Schemas
 class CompanyBase(BaseModel):
@@ -232,44 +332,6 @@ class LeadsPaginatedResponse(BaseModel):
     skip: int
     limit: int
 
-# Campaign & Email Schemas
-class CampaignCreate(BaseModel):
-    name: str
-    subject: Optional[str] = None
-    body_template: Optional[str] = None
-
-class CampaignResponse(BaseModel):
-    id: int
-    name: str
-    subject: Optional[str] = None
-    body_template: Optional[str] = None
-    status: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-class EmailGenerateRequest(BaseModel):
-    lead_id: int
-    channel: str # Email, LinkedIn, WhatsApp, Follow-up, Proposal
-
-class EmailSendRequest(BaseModel):
-    lead_id: int
-    subject: str
-    body: str
-
-class EmailResponse(BaseModel):
-    id: int
-    campaign_id: Optional[int] = None
-    lead_id: int
-    generated_body: Optional[str] = None
-    subject: Optional[str] = None
-    status: str
-    sent_at: Optional[datetime] = None
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 # Analytics Dashboard
 class DashboardStats(BaseModel):

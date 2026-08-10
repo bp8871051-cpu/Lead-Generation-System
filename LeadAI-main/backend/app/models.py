@@ -21,6 +21,7 @@ class User(Base):
     searches = relationship("Search", back_populates="user")
     activity_logs = relationship("ActivityLog", back_populates="user")
     assigned_leads = relationship("Lead", back_populates="assigned_user")
+    email_account = relationship("EmployeeEmailAccount", back_populates="employee", uselist=False, cascade="all, delete-orphan")
 
 class Company(Base):
     __tablename__ = "company"
@@ -172,6 +173,30 @@ class Campaign(Base):
     # Relationships
     emails = relationship("Email", back_populates="campaign", cascade="all, delete-orphan")
 
+class EmployeeEmailAccount(Base):
+    __tablename__ = "employee_email_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    provider = Column(String, default="Custom SMTP") # Gmail, Google Workspace, Microsoft 365 / Outlook, Hostinger, Custom SMTP
+    authentication_method = Column(String, default="SMTP") # SMTP, OAuth 2.0
+    smtp_host = Column(String, nullable=True)
+    smtp_port = Column(Integer, default=587)
+    encryption = Column(String, default="TLS") # TLS, SSL, None
+    smtp_username = Column(String, nullable=True)
+    encrypted_smtp_password = Column(Text, nullable=True)
+    sender_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+    last_tested_at = Column(DateTime, nullable=True)
+    last_test_status = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    employee = relationship("User", back_populates="email_account")
+
 class Email(Base):
     __tablename__ = "emails"
 
@@ -179,6 +204,10 @@ class Email(Base):
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True)
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sender_email = Column(String, nullable=True)
+    recipient_email = Column(String, nullable=True)
+    provider = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
     generated_body = Column(Text, nullable=True)
     subject = Column(String, nullable=True)
     
@@ -191,6 +220,7 @@ class Email(Base):
     campaign = relationship("Campaign", back_populates="emails")
     lead = relationship("Lead", back_populates="emails")
     sender = relationship("User")
+
 
 class Note(Base):
     __tablename__ = "notes"

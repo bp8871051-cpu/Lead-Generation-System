@@ -1,15 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+from datetime import datetime
 import smtplib
 
 from app.database import get_db
-from app.models import User, Company, Lead, Search, ActivityLog, Business
-from app.schemas import CompanyUpdate, CompanyResponse, UserResponse, UserCreate, UserUpdate
+from app.models import User, Company, Lead, Search, ActivityLog, Business, EmployeeEmailAccount
+from app.schemas import (
+    CompanyUpdate, CompanyResponse, UserResponse, UserCreate, UserUpdate,
+    EmployeeEmailAccountCreate, EmployeeEmailAccountUpdate, EmployeeEmailAccountResponse
+)
 from app.routers.auth import get_current_user, require_admin, get_password_hash
+from app.security_utils import encrypt_credential, decrypt_credential
+from app.routers.emails import test_smtp_connection_for_account, create_smtp_server
 from app.config import settings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+def format_email_account_dict(acct: EmployeeEmailAccount) -> Optional[dict]:
+    if not acct:
+        return None
+    return {
+        "id": acct.id,
+        "employee_id": acct.employee_id,
+        "email": acct.email,
+        "provider": acct.provider or "Custom SMTP",
+        "authentication_method": acct.authentication_method or "SMTP",
+        "smtp_host": acct.smtp_host,
+        "smtp_port": acct.smtp_port or 587,
+        "encryption": acct.encryption or "TLS",
+        "smtp_username": acct.smtp_username,
+        "sender_name": acct.sender_name,
+        "is_active": acct.is_active,
+        "is_default": acct.is_default,
+        "has_password": bool(acct.encrypted_smtp_password),
+        "last_tested_at": acct.last_tested_at,
+        "last_test_status": acct.last_test_status,
+        "created_at": acct.created_at,
+        "updated_at": acct.updated_at
+    }
 
 # ==========================================
 # Single Company Profile Management
@@ -57,9 +86,25 @@ def update_company_profile(
 # ==========================================
 # Employee Management (Max 5 Active Employees)
 # ==========================================
-@router.get("/employees", response_model=List[UserResponse])
+@router.get("/employees")
 def list_employees(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(User).all()
+    users = db.query(User).all()
+    results = []
+    for u in users:
+        acct_dict = format_email_account_dict(u.email_account)
+        results.append({
+            "id": u.id,
+            "email": u.email,
+            "full_name": u.full_name,
+            "designation": u.designation or "Team Member",
+            "avatar": u.avatar,
+            "role": u.role,
+            "is_active": u.is_active,
+            "last_login": u.last_login,
+            "created_at": u.created_at,
+            "email_account": acct_dict
+        })
+    return results
 
 @router.post("/employees", response_model=UserResponse)
 def create_employee(
@@ -150,46 +195,119 @@ def toggle_employee_status(
     db.commit()
     return {"status": "success", "is_active": target_user.is_active}
 
-from app.routers.emails import create_smtp_server
+
+# ==========================================
+# Employee Email Account Configuration
+# ==========================================
+@router.get("/employees/{user_id}/email-account")
+def get_employee_email_account(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    return format_email_account_dict(target_user.email_account)
+
+
+@router.post("/employees/{user_id}/email-account")
+def upsert_employee_email_account(
+    user_id: int,
+    acct_in: EmployeeEmailAccountCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    acct = target_user.email_account
+    if not acct:
+        acct = EmployeeEmailAccount(employee_id=user_id, email=acct_in.email)
+        db.add(acct)
+
+    acct.email = acct_in.email
+    acct.provider = acct_in.provider or "Custom SMTP"
+    acct.authentication_method = acct_in.authentication_method or "SMTP"
+    acct.smtp_host = acct_in.smtp_host
+    acct.smtp_port = acct_in.smtp_port or 587
+    acct.encryption = acct_in.encryption or "TLS"
+    acct.smtp_username = acct_in.smtp_username or acct_in.email
+    acct.sender_name = acct_in.sender_name or target_user.full_name or acct_in.email
+    acct.is_active = acct_in.is_active if acct_in.is_active is not None else True
+    acct.is_default = acct_in.is_default if acct_in.is_default is not None else False
+    acct.updated_at = datetime.utcnow()
+
+    # Password encryption
+    if acct_in.password and len(acct_in.password.strip()) > 0:
+        acct.encrypted_smtp_password = encrypt_credential(acct_in.password.strip())
+
+    db.commit()
+    db.refresh(acct)
+
+    log = ActivityLog(
+        user_id=admin.id,
+        action="EMAIL_CONFIG_UPDATED",
+        description=f"Updated email configuration ({acct.email}) for employee '{target_user.email}'"
+    )
+    db.add(log)
+    db.commit()
+
+    return format_email_account_dict(acct)
+
+
+@router.delete("/employees/{user_id}/email-account")
+def delete_employee_email_account(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user or not target_user.email_account:
+        raise HTTPException(status_code=404, detail="Email configuration not found.")
+
+    db.delete(target_user.email_account)
+    db.commit()
+    return {"status": "success", "message": "Email configuration removed."}
+
+
+@router.post("/employees/{user_id}/test-email-connection")
+def test_employee_email_connection(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    acct = target_user.email_account
+    if not acct:
+        raise HTTPException(status_code=400, detail="Employee has no email account configured.")
+
+    res = test_smtp_connection_for_account(acct, db)
+    return res
+
 
 # ==========================================
 # SMTP & System Utilities
 # ==========================================
 @router.get("/smtp-status")
-def check_smtp_status(current_user: User = Depends(get_current_user)):
-    host = settings.SMTP_HOST
-    port = settings.SMTP_PORT
-    user = settings.SMTP_USER
-    password = settings.SMTP_PASS
+def check_smtp_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    accounts = db.query(EmployeeEmailAccount).filter(EmployeeEmailAccount.is_active == True).all()
+    configured_count = len(accounts)
+    connected_count = sum(1 for a in accounts if a.last_test_status == "Connected")
 
-    if not host or not user or not password:
-        return {
-            "configured": False,
-            "status": "Not Configured",
-            "host": host,
-            "port": port,
-            "message": "SMTP credentials missing in .env file."
-        }
+    return {
+        "configured": configured_count > 0,
+        "status": f"{connected_count}/{configured_count} Accounts Connected" if configured_count > 0 else "No Employee Accounts Configured",
+        "active_employee_accounts": configured_count,
+        "connected_accounts": connected_count,
+        "fallback_host": settings.SMTP_HOST
+    }
 
-    try:
-        server = create_smtp_server(host, port, timeout=5.0)
-        server.login(user, password.strip())
-        server.quit()
-        return {
-            "configured": True,
-            "status": "Connected & Operational",
-            "host": host,
-            "port": port,
-            "from_email": settings.EMAIL_FROM or user
-        }
-    except Exception as e:
-        return {
-            "configured": True,
-            "status": "Connection Failed",
-            "host": host,
-            "port": port,
-            "error": str(e)
-        }
 
 @router.get("/system-logs")
 def get_system_logs(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -160,6 +160,18 @@ export const adminService = {
   toggleEmployeeStatus: async (id: number) => {
     return api.post<any>(`/admin/employees/${id}/toggle-active`);
   },
+  getEmployeeEmailAccount: async (userId: number) => {
+    return api.get<any>(`/admin/employees/${userId}/email-account`);
+  },
+  saveEmployeeEmailAccount: async (userId: number, data: any) => {
+    return api.post<any>(`/admin/employees/${userId}/email-account`, data);
+  },
+  deleteEmployeeEmailAccount: async (userId: number) => {
+    return api.delete<any>(`/admin/employees/${userId}/email-account`);
+  },
+  testEmployeeEmailConnection: async (userId: number) => {
+    return api.post<any>(`/admin/employees/${userId}/test-email-connection`);
+  },
   getSmtpStatus: async () => {
     return api.get<any>("/admin/smtp-status");
   },
@@ -250,9 +262,12 @@ export const analyticsService = {
   }
 };
 
-// Email Endpoints (Automatic Server SMTP)
+// Email Endpoints (Dynamic Employee SMTP)
 export const emailService = {
-  createCampaign: async (campaignData: any) => {
+  getActiveSenders: async () => {
+    return api.get<any[]>("/emails/active-senders");
+  },
+  createCampaign: async (campaignData: { name: string; subject?: string; body_template?: string; employee_id?: number }) => {
     return api.post<any>("/emails/campaigns", campaignData);
   },
   getCampaigns: async () => {
@@ -269,10 +284,13 @@ export const emailService = {
     subject: string;
     body: string;
     recipient_email: string;
+    employee_id?: number;
+
   }) => {
     return api.post<any>("/emails/send", payload);
   }
 };
+
 
 // Export Endpoints
 export const exportService = {

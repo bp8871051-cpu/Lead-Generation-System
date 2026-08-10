@@ -4,12 +4,13 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Mail, Send, Sparkles, MessageSquare, AlertCircle, Plus, 
-  Trash2, Play, Eye, RefreshCcw, Loader2, BarChart2, X, ArrowLeft
+  Trash2, Play, Eye, RefreshCcw, Loader2, BarChart2, X, ArrowLeft, User
 } from "lucide-react";
 import { emailService } from "@/services/api";
 
 export default function OutreachCampaignsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [activeSenders, setActiveSenders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // New campaign modal state
@@ -17,21 +18,26 @@ export default function OutreachCampaignsPage() {
   const [campName, setCampName] = useState("");
   const [subjectTemplate, setSubjectTemplate] = useState("");
   const [bodyTemplate, setBodyTemplate] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    loadCampaigns();
+    loadData();
   }, []);
 
-  const loadPipeline = () => {
-    loadCampaigns();
-  };
-
-  const loadCampaigns = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
-      const data = await emailService.getCampaigns();
-      setCampaigns(data || []);
+      const [campsData, sendersData] = await Promise.all([
+        emailService.getCampaigns(),
+        emailService.getActiveSenders()
+      ]);
+      setCampaigns(campsData || []);
+      const senders = sendersData || [];
+      setActiveSenders(senders);
+      if (senders.length > 0) {
+        setSelectedEmployeeId(senders[0].employee_id);
+      }
     } catch (err) {
       console.error(err);
       setCampaigns([]);
@@ -48,7 +54,8 @@ export default function OutreachCampaignsPage() {
       const newCamp = await emailService.createCampaign({
         name: campName,
         subject: subjectTemplate,
-        body_template: bodyTemplate
+        body_template: bodyTemplate,
+        employee_id: selectedEmployeeId || undefined
       });
       setCampaigns(prev => [newCamp, ...prev]);
       setShowModal(false);
@@ -62,7 +69,6 @@ export default function OutreachCampaignsPage() {
     }
   };
 
-
   return (
     <div className="space-y-8 font-sans relative">
       {/* Title & Back to Home */}
@@ -72,8 +78,8 @@ export default function OutreachCampaignsPage() {
         </Link>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
           <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Step 2: Outreach Campaigns</h1>
-            <p className="text-slate-500 text-sm mt-1">Configure email templates and monitor real-time open and reply rates.</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Outreach Campaigns</h1>
+            <p className="text-slate-500 text-sm mt-1">Configure employee-wise email templates and monitor campaign outreach.</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -84,7 +90,7 @@ export default function OutreachCampaignsPage() {
               Create Campaign
             </button>
             <button
-              onClick={loadCampaigns}
+              onClick={loadData}
               className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl shadow-sm hover:shadow transition-all"
             >
               <RefreshCcw className="w-4 h-4" />
@@ -93,38 +99,25 @@ export default function OutreachCampaignsPage() {
         </div>
       </div>
 
-      {/* Campaigns Telemetry */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-premium flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Sent Emails</span>
-          <div className="mt-3 flex items-center justify-between">
-            <h4 className="text-2xl font-black text-slate-950">144</h4>
-            <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">SMTP active</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-premium flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Average Open Rate</span>
-          <div className="mt-3 flex items-center justify-between">
-            <h4 className="text-2xl font-black text-slate-950">62.4%</h4>
-            <span className="text-[9px] bg-blue-50 text-primary px-1.5 py-0.5 rounded font-bold">&ge; industry avg</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-premium flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Response Reply Rate</span>
-          <div className="mt-3 flex items-center justify-between">
-            <h4 className="text-2xl font-black text-slate-950">18.2%</h4>
-            <span className="text-[9px] bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded font-bold">19 replies</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-premium flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Average Click-Through</span>
-          <div className="mt-3 flex items-center justify-between">
-            <h4 className="text-2xl font-black text-slate-950">35.8%</h4>
-            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">Link track</span>
-          </div>
+      {/* Active Sending Accounts Telemetry */}
+      <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-sm space-y-2">
+        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <User className="w-4 h-4 text-emerald-400" /> Company Verified Employee Sending Accounts ({activeSenders.length})
+        </h4>
+        <div className="flex flex-wrap gap-3 pt-1">
+          {activeSenders.length === 0 ? (
+            <span className="text-xs text-amber-400 font-semibold">
+              No employee email account is configured. Go to Settings -&gt; Employees to add email credentials.
+            </span>
+          ) : (
+            activeSenders.map(s => (
+              <div key={s.employee_id} className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="font-bold text-white">{s.employee_name}:</span>
+                <span className="font-mono text-slate-300">{s.email}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -155,17 +148,11 @@ export default function OutreachCampaignsPage() {
                   <th className="px-6 py-3.5">Campaign Name</th>
                   <th className="px-6 py-3.5">Subject Template</th>
                   <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5">Sent Count</th>
-                  <th className="px-6 py-3.5">Open Rate</th>
-                  <th className="px-6 py-3.5">Reply Rate</th>
                   <th className="px-6 py-3.5 text-right">Created</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {campaigns.map((camp) => {
-                  const openPercent = camp.sent > 0 ? Math.round((camp.opens / camp.sent) * 100) : 0;
-                  const replyPercent = camp.sent > 0 ? Math.round((camp.replies / camp.sent) * 100) : 0;
-                  
                   let statusBadge = "bg-slate-100 text-slate-600 border-slate-200";
                   if (camp.status === "Active") statusBadge = "bg-emerald-50 text-emerald-700 border-emerald-200";
                   else if (camp.status === "Paused") statusBadge = "bg-amber-50 text-amber-700 border-amber-200";
@@ -173,28 +160,11 @@ export default function OutreachCampaignsPage() {
                   return (
                     <tr key={camp.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4 font-bold text-slate-900">{camp.name}</td>
-                      <td className="px-6 py-4 text-slate-500 font-mono text-[11px] max-w-[220px] truncate">{camp.subject}</td>
+                      <td className="px-6 py-4 text-slate-500 font-mono text-[11px] max-w-[280px] truncate">{camp.subject || "N/A"}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${statusBadge}`}>
                           {camp.status}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-slate-700">{camp.sent}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{openPercent}%</span>
-                          <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
-                            <div className="bg-primary h-full rounded-full" style={{ width: `${openPercent}%` }} />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-primary">{replyPercent}%</span>
-                          <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
-                            <div className="bg-accent h-full rounded-full" style={{ width: `${replyPercent}%` }} />
-                          </div>
-                        </div>
                       </td>
                       <td className="px-6 py-4 text-right text-slate-400">
                         {new Date(camp.created_at).toLocaleDateString()}
@@ -227,6 +197,27 @@ export default function OutreachCampaignsPage() {
             </div>
 
             <form onSubmit={handleCreateCampaign} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Send From (Select Employee Account)</label>
+                {activeSenders.length === 0 ? (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl font-medium">
+                    ⚠️ No verified sending email account is available. Configure an employee email account in Settings first.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedEmployeeId || ""}
+                    onChange={(e) => setSelectedEmployeeId(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-primary shadow-sm bg-white text-slate-900 font-semibold text-xs"
+                  >
+                    {activeSenders.map(s => (
+                      <option key={s.employee_id} value={s.employee_id}>
+                        {s.employee_name} — {s.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Campaign Name</label>
                 <input
@@ -276,8 +267,8 @@ export default function OutreachCampaignsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={creating}
-                  className="px-5 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl font-bold shadow-sm"
+                  disabled={creating || activeSenders.length === 0}
+                  className="px-5 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-xl font-bold shadow-sm"
                 >
                   {creating ? "Creating Campaign..." : "Launch Campaign"}
                 </button>

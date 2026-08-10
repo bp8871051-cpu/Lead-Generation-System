@@ -33,6 +33,9 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
   const [sendingEmail, setSendingEmail] = useState(false);
   const [smtpFeedback, setSmtpFeedback] = useState<{ type: "success" | "error", message: string } | null>(null);
   const [sentEmails, setSentEmails] = useState<any[]>([]);
+  const [activeSenders, setActiveSenders] = useState<any[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+
 
   // Task Checklist & Custom Notes state
   const [tasks, setTasks] = useState<any[]>([]);
@@ -140,10 +143,6 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
   const handleSendEmail = async () => {
     if (!lead) return;
     setSmtpFeedback(null);
-    const hostingerToken = localStorage.getItem("leadai_hostinger_token") || "";
-    const hostingerMailboxId = localStorage.getItem("leadai_hostinger_mailbox_id") || "";
-    const smtpUser = localStorage.getItem("leadai_smtp_user") || "";
-    const smtpPassword = localStorage.getItem("leadai_smtp_password") || "";
 
     if (!recipientEmail) {
       setSmtpFeedback({ type: "error", message: "Please enter a Recipient email address." });
@@ -164,7 +163,8 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
         lead_id: lead.id,
         subject,
         body: bodyText,
-        recipient_email: recipientEmail
+        recipient_email: recipientEmail,
+        employee_id: selectedEmployeeId || undefined
       });
 
       setLead((prev: any) => ({ ...prev, status: "Contacted" }));
@@ -173,16 +173,17 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
         message: `Outreach email sent successfully using company SMTP!`
       });
 
-      const newEmailLog = {
-        id: Math.floor(Math.random() * 1000),
-        generated_body: outreachDraft,
-        status: "Sent",
-        created_at: new Date().toISOString()
-      };
-      setSentEmails(prev => [newEmailLog, ...prev]);
+      try {
+        const draftsData = await emailService.getLeadDrafts(lead.id);
+        setSentEmails(draftsData || []);
+      } catch (e) {}
     } catch (err: any) {
       console.error(err);
       setSmtpFeedback({ type: "error", message: err.message || "Failed to send email." });
+      try {
+        const draftsData = await emailService.getLeadDrafts(lead.id);
+        setSentEmails(draftsData || []);
+      } catch (e) {}
     } finally {
       setSendingEmail(false);
     }
@@ -482,37 +483,64 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
               <div className="lg:col-span-2 space-y-4">
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">SMTP Outreach Outbox</h4>
 
-                <div className="flex gap-3">
-                  <select
-                    value={outreachChannel}
-                    onChange={(e) => setOutreachChannel(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:border-primary shadow-sm text-slate-600 font-bold"
-                  >
-                    <option value="Cold Email">Cold Email Sequence</option>
-                    <option value="LinkedIn Message">LinkedIn Contact Request</option>
-                    <option value="WhatsApp Message">WhatsApp Pitch</option>
-                    <option value="Follow-up Email">Follow-up Sequence</option>
-                    <option value="Proposal">Service Proposal Scope</option>
-                  </select>
-
-                  <button
-                    onClick={handleGenerateOutreach}
-                    disabled={generatingDraft || sendingEmail}
-                    className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5"
-                  >
-                    {generatingDraft ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Generating...
-                      </>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Send From (Employee Account)</label>
+                    {activeSenders.length === 0 ? (
+                      <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[11px] rounded-xl font-medium">
+                        ⚠️ No active employee email account configured in Settings.
+                      </div>
                     ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        Generate Pitch
-                      </>
+                      <select
+                        value={selectedEmployeeId || ""}
+                        onChange={(e) => setSelectedEmployeeId(parseInt(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:border-primary shadow-sm text-slate-900 font-bold"
+                      >
+                        {activeSenders.map((s: any) => (
+                          <option key={s.employee_id} value={s.employee_id}>
+                            {s.employee_name} — {s.email}
+                          </option>
+                        ))}
+                      </select>
                     )}
-                  </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Outreach Sequence Channel</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={outreachChannel}
+                        onChange={(e) => setOutreachChannel(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:border-primary shadow-sm text-slate-600 font-bold"
+                      >
+                        <option value="Cold Email">Cold Email Sequence</option>
+                        <option value="LinkedIn Message">LinkedIn Contact Request</option>
+                        <option value="WhatsApp Message">WhatsApp Pitch</option>
+                        <option value="Follow-up Email">Follow-up Sequence</option>
+                        <option value="Proposal">Service Proposal Scope</option>
+                      </select>
+
+                      <button
+                        onClick={handleGenerateOutreach}
+                        disabled={generatingDraft || sendingEmail}
+                        className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 shrink-0"
+                      >
+                        {generatingDraft ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            Generate Pitch
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
 
                 {smtpFeedback && (
                   <div className={`p-4 rounded-xl text-xs font-bold flex gap-2 items-center ${smtpFeedback.type === "success"
