@@ -146,10 +146,9 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
             last_error_code = "SMTP_TLS_ERROR"
             last_error_msg = f"TLS/SSL Handshake Error on {account.smtp_host}:{port} - {str(e)}"
             logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
-        except (socket.gaierror, ConnectionRefusedError, OSError) as e:
             if "timed out" in str(e).lower() or isinstance(e, socket.timeout):
                 last_error_code = "SMTP_CONNECTION_TIMEOUT"
-                last_error_msg = f"Connection timed out on host {account.smtp_host}:{port}"
+                last_error_msg = f"Connection timed out on {account.smtp_host}:{port}. Note: Cloud platforms (Render Free Tier) block outbound raw SMTP ports 587/465. Run backend locally or use HTTP Email API."
             else:
                 last_error_code = "SMTP_HOST_UNREACHABLE"
                 last_error_msg = f"Host unreachable {account.smtp_host}:{port} - {str(e)}"
@@ -157,11 +156,12 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
         except Exception as e:
             if "timed out" in str(e).lower() or isinstance(e, TimeoutError):
                 last_error_code = "SMTP_CONNECTION_TIMEOUT"
-                last_error_msg = f"Connection timed out on host {account.smtp_host}:{port}"
+                last_error_msg = f"Connection timed out on {account.smtp_host}:{port}. Note: Cloud platforms (Render Free Tier) block outbound raw SMTP ports 587/465. Run backend locally or use HTTP Email API."
             else:
                 last_error_code = "SMTP_HOST_UNREACHABLE"
                 last_error_msg = str(e)
             logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
+
 
     account.last_tested_at = datetime.utcnow()
     account.last_test_status = f"{last_error_code}: {last_error_msg}"
