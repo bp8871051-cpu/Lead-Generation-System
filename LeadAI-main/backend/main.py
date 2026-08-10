@@ -174,8 +174,10 @@ try:
         db.refresh(bhaumik_user)
     else:
         bhaumik_user.role = "employee"
+        bhaumik_user.hashed_password = hashed_emp_pw
         bhaumik_user.is_active = True
         db.commit()
+
 
     bhaumik_acct = db.query(EmployeeEmailAccount).filter(EmployeeEmailAccount.employee_id == bhaumik_user.id).first()
     if not bhaumik_acct:
