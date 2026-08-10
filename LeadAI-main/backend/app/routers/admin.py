@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 import smtplib
+
 
 from app.database import get_db
 from app.models import User, Company, Lead, Search, ActivityLog, Business, EmployeeEmailAccount
