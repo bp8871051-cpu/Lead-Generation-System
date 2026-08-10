@@ -311,14 +311,15 @@ export const emailService = {
 export const exportService = {
   downloadCsv: () => {
     const token = typeof window !== "undefined" ? (localStorage.getItem("leadai_token") || localStorage.getItem("token")) : "";
-    window.open(`${API_BASE_URL}/export/csv?token=${token}`, "_blank");
+    window.open(`${getApiBaseUrl()}/export/csv?token=${token}`, "_blank");
   },
   downloadExcel: () => {
     const token = typeof window !== "undefined" ? (localStorage.getItem("leadai_token") || localStorage.getItem("token")) : "";
-    window.open(`${API_BASE_URL}/export/excel?token=${token}`, "_blank");
+    window.open(`${getApiBaseUrl()}/export/excel?token=${token}`, "_blank");
   },
   downloadJson: () => {
     const token = typeof window !== "undefined" ? (localStorage.getItem("leadai_token") || localStorage.getItem("token")) : "";
-    window.open(`${API_BASE_URL}/export/json?token=${token}`, "_blank");
+    window.open(`${getApiBaseUrl()}/export/json?token=${token}`, "_blank");
   }
 };
+
