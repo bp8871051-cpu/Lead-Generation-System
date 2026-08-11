@@ -585,413 +585,287 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {/* 4. MAIN CONTENT LAYOUT FOR EMPLOYEES TAB */}
+      {/* 4. MAIN CONTENT LAYOUT FOR EMPLOYEES TAB (FULL WIDTH) */}
       {activeTab === "employees" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="space-y-6">
           
-          {/* LEFT SIDE: Employee Management Table & Security Card (~70-75% width on desktop) */}
-          <div className="lg:col-span-8 space-y-6">
-            
-            {/* 5. EMPLOYEE MANAGEMENT CARD */}
-            <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-5 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-xs font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
-                    <Users className="w-4 h-4 text-primary" /> COMPANY EMPLOYEE & EMAIL ACCOUNT MANAGEMENT
-                  </h3>
-                  <p className="text-[11.5px] text-slate-400 mt-1">
-                    Active Employees: <strong className="text-emerald-400">{activeEmployeeCount}/5</strong>
-                    <span className="text-slate-500 ml-1.5 font-medium">
-                      ({activeEmployeeCount >= 5 ? "0 slots remaining" : `${5 - activeEmployeeCount} employee slot${5 - activeEmployeeCount === 1 ? '' : 's'} remaining`})
-                    </span>
-                  </p>
-                </div>
+          {/* 5. EMPLOYEE MANAGEMENT CARD */}
+          <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 space-y-5 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xs font-extrabold text-white flex items-center gap-2 uppercase tracking-wider">
+                  <Users className="w-4 h-4 text-primary" /> COMPANY EMPLOYEE & EMAIL ACCOUNT MANAGEMENT
+                </h3>
+                <p className="text-[11.5px] text-slate-400 mt-1">
+                  Active Employees: <strong className="text-emerald-400">{activeEmployeeCount}/5</strong>
+                  <span className="text-slate-500 ml-1.5 font-medium">
+                    ({activeEmployeeCount >= 5 ? "0 slots remaining" : `${5 - activeEmployeeCount} employee slot${5 - activeEmployeeCount === 1 ? '' : 's'} remaining`})
+                  </span>
+                </p>
+              </div>
+
+              {/* Action Buttons Toolbar */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <button
+                  onClick={handleTestAllConnections}
+                  disabled={testingConnectionId === "all"}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all disabled:opacity-50"
+                  title="Test All Connections"
+                >
+                  {testingConnectionId === "all" ? <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Zap className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span>Test All Connections</span>
+                </button>
+
+                <button
+                  onClick={handleExportEmployees}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all"
+                  title="Export Employee List as CSV"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Export CSV</span>
+                </button>
 
                 {isAdmin && (
                   <button
                     onClick={() => setShowAddEmployeeModal(true)}
                     disabled={activeEmployeeCount >= 5}
-                    className="px-4 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-primary/20 transition-all shrink-0"
+                    className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-primary/20 transition-all shrink-0"
                   >
                     <UserPlus className="w-4 h-4" /> Add Employee Account
                   </button>
                 )}
               </div>
+            </div>
 
-              {activeEmployeeCount >= 5 && (
-                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl font-bold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>Maximum 5 active employees reached. You cannot add more employee slots.</span>
-                </div>
-              )}
+            {activeEmployeeCount >= 5 && (
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Maximum 5 active employees reached. You cannot add more employee slots.</span>
+              </div>
+            )}
 
-              {/* 6. EMPLOYEE TABLE */}
-              <div className="overflow-x-auto border border-slate-800/80 rounded-xl [scrollbar-color:#334155_transparent] [scrollbar-width:thin]">
-                <table className="w-full text-left text-xs min-w-[720px]">
-                  <thead>
-                    <tr className="bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-4 font-extrabold whitespace-nowrap min-w-[140px]">EMPLOYEE</th>
-                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[80px]">ROLE</th>
-                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[160px]">SENDING EMAIL ACCOUNT</th>
-                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[140px]">CONNECTION STATUS</th>
-                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[130px]">LAST TESTED</th>
-                      <th className="py-3 px-4 text-right font-extrabold whitespace-nowrap min-w-[160px]">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-medium">
-                    {employees.map(emp => {
-                      const acct = emp.email_account;
-                      const isTesting = testingConnectionId === emp.id || testingConnectionId === "all";
-                      const isConnected = acct?.last_test_status === "Connected";
-                      const isFailed = !!acct?.last_test_status && (
-                        acct.last_test_status.startsWith("Connection Failed") ||
-                        acct.last_test_status.includes("SMTP_") ||
-                        acct.last_test_status.includes("timed out")
-                      );
+            {/* 6. EMPLOYEE TABLE (FULL WIDTH) */}
+            <div className="overflow-x-auto border border-slate-800/80 rounded-xl [scrollbar-color:#334155_transparent] [scrollbar-width:thin]">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider">
+                    <th className="py-3.5 px-4 font-extrabold whitespace-nowrap">EMPLOYEE</th>
+                    <th className="py-3.5 px-3 font-extrabold whitespace-nowrap">ROLE</th>
+                    <th className="py-3.5 px-3 font-extrabold whitespace-nowrap">SENDING EMAIL ACCOUNT</th>
+                    <th className="py-3.5 px-3 font-extrabold whitespace-nowrap">CONNECTION STATUS</th>
+                    <th className="py-3.5 px-3 font-extrabold whitespace-nowrap">LAST TESTED</th>
+                    <th className="py-3.5 px-4 text-right font-extrabold whitespace-nowrap">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {employees.map(emp => {
+                    const acct = emp.email_account;
+                    const isTesting = testingConnectionId === emp.id || testingConnectionId === "all";
+                    const isConnected = acct?.last_test_status === "Connected";
+                    const isFailed = !!acct?.last_test_status && (
+                      acct.last_test_status.startsWith("Connection Failed") ||
+                      acct.last_test_status.includes("SMTP_") ||
+                      acct.last_test_status.includes("timed out")
+                    );
 
-                      const formattedLastTested = acct?.last_tested_at
-                        ? new Date(acct.last_tested_at).toLocaleString([], {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })
-                        : "Never";
+                    const formattedLastTested = acct?.last_tested_at
+                      ? new Date(acct.last_tested_at).toLocaleString([], {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : "Never";
 
-                      return (
-                        <tr key={emp.id} className="hover:bg-slate-900/60 transition-colors group">
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="font-bold text-white text-xs whitespace-nowrap">{emp.full_name || emp.email}</div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">{emp.email}</div>
-                          </td>
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-900/60 transition-colors group">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-bold text-white text-xs whitespace-nowrap">{emp.full_name || emp.email}</div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">{emp.email}</div>
+                        </td>
 
-                          <td className="py-3.5 px-3 whitespace-nowrap">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-block whitespace-nowrap ${
-                              emp.role === "admin" 
-                                ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" 
-                                : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-block whitespace-nowrap ${
+                            emp.role === "admin" 
+                              ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" 
+                              : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                          }`}>
+                            {emp.role.toUpperCase()}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          {acct && acct.email ? (
+                            <div>
+                              <div className="font-mono text-white text-[11px] font-bold whitespace-nowrap">{acct.email}</div>
+                              <div className="text-[9.5px] text-slate-400 font-semibold whitespace-nowrap">{acct.provider || "Hostinger"}</div>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 italic whitespace-nowrap">Not Configured</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          {acct && acct.email ? (
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 whitespace-nowrap ${
+                              isConnected
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : isFailed
+                                ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
                             }`}>
-                              {emp.role.toUpperCase()}
+                              {isConnected ? <Check className="w-3 h-3" /> : isFailed ? <AlertTriangle className="w-3 h-3" /> : <Zap className="w-3 h-3 text-amber-400" />}
+                              {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured")}
                             </span>
-                          </td>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800/80 text-slate-400 border border-slate-700/50 whitespace-nowrap">
+                              No Config
+                            </span>
+                          )}
+                        </td>
 
-                          <td className="py-3.5 px-3 whitespace-nowrap">
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          <div className="text-[10.5px] text-slate-300 font-mono whitespace-nowrap">
+                            {formattedLastTested}
+                          </div>
+                        </td>
+
+                        {/* 7. ACTIONS WITH 3-DOT MENU */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             {acct && acct.email ? (
-                              <div>
-                                <div className="font-mono text-white text-[11px] font-bold whitespace-nowrap">{acct.email}</div>
-                                <div className="text-[9.5px] text-slate-400 font-semibold whitespace-nowrap">{acct.provider || "Hostinger"}</div>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-slate-500 italic whitespace-nowrap">Not Configured</span>
-                            )}
-                          </td>
+                              <>
+                                <button
+                                  onClick={() => handleTestConnection(emp.id)}
+                                  disabled={isTesting}
+                                  className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
+                                  title="Test Email Connection"
+                                >
+                                  {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" /> : <Zap className="w-3 h-3 text-emerald-400 shrink-0" />}
+                                  <span className="whitespace-nowrap">{isTesting ? "Testing..." : "Test Connection"}</span>
+                                </button>
 
-                          <td className="py-3.5 px-3 whitespace-nowrap">
-                            {acct && acct.email ? (
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 whitespace-nowrap ${
-                                isConnected
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : isFailed
-                                  ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                  : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
-                              }`}>
-                                {isConnected ? <Check className="w-3 h-3" /> : isFailed ? <AlertTriangle className="w-3 h-3" /> : <Zap className="w-3 h-3 text-amber-400" />}
-                                {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured")}
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800/80 text-slate-400 border border-slate-700/50 whitespace-nowrap">
-                                No Config
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 px-3 whitespace-nowrap">
-                            <div className="text-[10.5px] text-slate-300 font-mono whitespace-nowrap">
-                              {formattedLastTested}
-                            </div>
-                          </td>
-
-                          {/* 7. ACTIONS WITH 3-DOT MENU */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                              {acct && acct.email ? (
-                                <>
+                                {/* 3-Dot Action Menu Button */}
+                                <div className="relative shrink-0">
                                   <button
-                                    onClick={() => handleTestConnection(emp.id)}
-                                    disabled={isTesting}
-                                    className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
-                                    title="Test Email Connection"
+                                    onClick={() => setActiveActionMenuId(activeActionMenuId === emp.id ? null : emp.id)}
+                                    className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all shrink-0"
+                                    title="More Actions"
                                   >
-                                    {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" /> : <Zap className="w-3 h-3 text-emerald-400 shrink-0" />}
-                                    <span className="whitespace-nowrap">{isTesting ? "Testing..." : "Test Connection"}</span>
+                                    <MoreVertical className="w-4 h-4" />
                                   </button>
 
-                                  {/* 3-Dot Action Menu Button */}
-                                  <div className="relative shrink-0">
-                                    <button
-                                      onClick={() => setActiveActionMenuId(activeActionMenuId === emp.id ? null : emp.id)}
-                                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all shrink-0"
-                                      title="More Actions"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
+                                  {activeActionMenuId === emp.id && (
+                                    <>
+                                      <div className="fixed inset-0 z-10" onClick={() => setActiveActionMenuId(null)} />
+                                      <div className="absolute right-0 top-full mt-1.5 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-20 py-1.5 text-xs font-semibold text-left overflow-hidden">
+                                        <button
+                                          onClick={() => {
+                                            setActiveActionMenuId(null);
+                                            handleOpenEmailModal(emp);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                        >
+                                          <Settings2 className="w-3.5 h-3.5 text-primary" /> Edit Email
+                                        </button>
 
-                                    {activeActionMenuId === emp.id && (
-                                      <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setActiveActionMenuId(null)} />
-                                        <div className="absolute right-0 top-full mt-1.5 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-20 py-1.5 text-xs font-semibold text-left overflow-hidden">
+                                        <button
+                                          onClick={() => {
+                                            setActiveActionMenuId(null);
+                                            handleTestConnection(emp.id);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                        >
+                                          <Zap className="w-3.5 h-3.5 text-emerald-400" /> Test Connection
+                                        </button>
+
+                                        {isAdmin && emp.role !== "admin" && (
                                           <button
                                             onClick={() => {
                                               setActiveActionMenuId(null);
-                                              handleOpenEmailModal(emp);
+                                              handleToggleActive(emp.id);
                                             }}
                                             className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                                           >
-                                            <Settings2 className="w-3.5 h-3.5 text-primary" /> Edit Email
+                                            <User className="w-3.5 h-3.5 text-amber-400" /> {emp.is_active ? "Deactivate" : "Activate"}
                                           </button>
+                                        )}
 
+                                        <div className="my-1 border-t border-slate-800" />
+
+                                        {isAdmin && (
                                           <button
                                             onClick={() => {
                                               setActiveActionMenuId(null);
-                                              handleTestConnection(emp.id);
+                                              setRemovingEmailEmployee(emp);
                                             }}
-                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-bold"
                                           >
-                                            <Zap className="w-3.5 h-3.5 text-emerald-400" /> Test Connection
+                                            <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Remove Account
                                           </button>
-
-                                          {isAdmin && emp.role !== "admin" && (
-                                            <button
-                                              onClick={() => {
-                                                setActiveActionMenuId(null);
-                                                handleToggleActive(emp.id);
-                                              }}
-                                              className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                                            >
-                                              <User className="w-3.5 h-3.5 text-amber-400" /> {emp.is_active ? "Deactivate" : "Activate"}
-                                            </button>
-                                          )}
-
-                                          <div className="my-1 border-t border-slate-800" />
-
-                                          {isAdmin && (
-                                            <button
-                                              onClick={() => {
-                                                setActiveActionMenuId(null);
-                                                setRemovingEmailEmployee(emp);
-                                              }}
-                                              className="w-full flex items-center gap-2 px-3.5 py-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-bold"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Remove Account
-                                            </button>
-                                          )}
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => handleOpenEmailModal(emp)}
-                                    className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20 whitespace-nowrap shrink-0"
-                                  >
-                                    <Mail className="w-3 h-3 shrink-0" /> Configure Email
-                                  </button>
-
-                                  {isAdmin && emp.role !== "admin" && (
-                                    <button
-                                      onClick={() => handleToggleActive(emp.id)}
-                                      className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-bold transition-all border whitespace-nowrap shrink-0 ${
-                                        emp.is_active 
-                                          ? "bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700" 
-                                          : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20"
-                                      }`}
-                                      title={emp.is_active ? "Deactivate Employee" : "Activate Employee"}
-                                    >
-                                      {emp.is_active ? "Deactivate" : "Activate"}
-                                    </button>
+                                        )}
+                                      </div>
+                                    </>
                                   )}
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleOpenEmailModal(emp)}
+                                  className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20 whitespace-nowrap shrink-0"
+                                >
+                                  <Mail className="w-3 h-3 shrink-0" /> Configure Email
+                                </button>
+
+                                {isAdmin && emp.role !== "admin" && (
+                                  <button
+                                    onClick={() => handleToggleActive(emp.id)}
+                                    className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-bold transition-all border whitespace-nowrap shrink-0 ${
+                                      emp.is_active 
+                                        ? "bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700" 
+                                        : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20"
+                                    }`}
+                                    title={emp.is_active ? "Deactivate Employee" : "Activate Employee"}
+                                  >
+                                    {emp.is_active ? "Deactivate" : "Activate"}
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* 11. SECURITY CARD */}
-            <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
-              <div className="flex items-center gap-3.5">
-                <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5 uppercase tracking-wider">
-                    SECURE & ENCRYPTED
-                  </h4>
-                  <p className="text-[11.5px] text-slate-400 mt-0.5">
-                    Email credentials and provider configuration are securely stored and are never exposed to the frontend.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowSecurityModal(true)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-center"
-              >
-                <Info className="w-3.5 h-3.5 text-primary" /> Learn More
-              </button>
-            </div>
-
           </div>
 
-          {/* RIGHT SIDE: Employee Summary & Quick Actions (~25-30% width on desktop) */}
-          <div className="lg:col-span-4 space-y-6">
-            
-            {/* 9. EMPLOYEE SUMMARY */}
-            <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" /> EMPLOYEE SUMMARY
-                </h3>
-                <span className="text-[10px] text-slate-500 font-extrabold uppercase">Live Stats</span>
+          {/* 11. SECURITY CARD (FULL WIDTH) */}
+          <div className="p-5 bg-slate-950/80 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
+                <ShieldCheck className="w-6 h-6" />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {/* Metric 1 */}
-                <div className="p-3.5 bg-slate-900/80 border border-slate-800/80 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Active Employees</span>
-                    <Users className="w-3.5 h-3.5 text-purple-400" />
-                  </div>
-                  <div className="text-lg font-black text-white">{activeEmployeeCount}/5</div>
-                  <div className="text-[9.5px] text-slate-400">{5 - activeEmployeeCount} slots remaining</div>
-                </div>
-
-                {/* Metric 2 */}
-                <div className="p-3.5 bg-slate-900/80 border border-slate-800/80 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Email Accounts</span>
-                    <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                  </div>
-                  <div className="text-lg font-black text-white">{configuredEmailAccountsCount}</div>
-                  <div className="text-[9.5px] text-slate-400">Configured addresses</div>
-                </div>
-
-                {/* Metric 3 */}
-                <div className="p-3.5 bg-slate-900/80 border border-slate-800/80 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Connected</span>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  </div>
-                  <div className="text-lg font-black text-emerald-400">{connectedAccountsCount}</div>
-                  <div className="text-[9.5px] text-emerald-400/80">Active SMTP / API</div>
-                </div>
-
-                {/* Metric 4 */}
-                <div className="p-3.5 bg-slate-900/80 border border-slate-800/80 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider">Disconnected</span>
-                    <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                  </div>
-                  <div className={`text-lg font-black ${disconnectedAccountsCount > 0 ? "text-rose-400" : "text-slate-400"}`}>
-                    {disconnectedAccountsCount}
-                  </div>
-                  <div className="text-[9.5px] text-slate-400">Failed / Pending</div>
-                </div>
+              <div>
+                <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                  SECURE & ENCRYPTED
+                </h4>
+                <p className="text-[11.5px] text-slate-400 mt-0.5">
+                  Email credentials and provider configuration are securely stored and are never exposed to the frontend.
+                </p>
               </div>
             </div>
 
-            {/* 10. QUICK ACTIONS */}
-            <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-3.5 shadow-xl">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-400" /> QUICK ACTIONS
-                </h3>
-              </div>
-
-              <div className="space-y-2">
-                {/* Action 1 */}
-                <button
-                  onClick={() => setShowAddEmployeeModal(true)}
-                  disabled={activeEmployeeCount >= 5 || !isAdmin}
-                  className="w-full p-3 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-primary/40 rounded-xl flex items-center justify-between transition-all group disabled:opacity-50 text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <UserPlus className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white">Add Employee Account</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-primary transition-transform group-hover:translate-x-0.5" />
-                </button>
-
-                {/* Action 2 */}
-                <button
-                  onClick={handleTestAllConnections}
-                  disabled={testingConnectionId === "all"}
-                  className="w-full p-3 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-emerald-500/40 rounded-xl flex items-center justify-between transition-all group text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      {testingConnectionId === "all" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white">Test All Connections</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-transform group-hover:translate-x-0.5" />
-                </button>
-
-                {/* Action 3 */}
-                <button
-                  onClick={handleExportEmployees}
-                  className="w-full p-3 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/40 rounded-xl flex items-center justify-between transition-all group text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                      <Download className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white">Export Employees</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-transform group-hover:translate-x-0.5" />
-                </button>
-
-                {/* Action 4 (Red Danger Style) */}
-                <button
-                  onClick={() => setShowRemoveInactiveModal(true)}
-                  disabled={!isAdmin}
-                  className="w-full p-3 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 rounded-xl flex items-center justify-between transition-all group text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                      <Trash2 className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-bold text-rose-300 group-hover:text-rose-200">Remove Inactive Accounts</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-rose-400/60 group-hover:text-rose-400 transition-transform group-hover:translate-x-0.5" />
-                </button>
-
-                {/* Action 5 */}
-                <button
-                  onClick={() => setActiveTab("logs")}
-                  className="w-full p-3 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-purple-500/40 rounded-xl flex items-center justify-between transition-all group text-left"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <Activity className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white">System Audit Logs</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-purple-400 transition-transform group-hover:translate-x-0.5" />
-                </button>
-              </div>
-            </div>
-
+            <button
+              onClick={() => setShowSecurityModal(true)}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-center"
+            >
+              <Info className="w-3.5 h-3.5 text-primary" /> Learn More
+            </button>
           </div>
 
         </div>
