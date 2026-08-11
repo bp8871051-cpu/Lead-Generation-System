@@ -626,16 +626,16 @@ export default function SettingsPage() {
               )}
 
               {/* 6. EMPLOYEE TABLE */}
-              <div className="overflow-x-auto border border-slate-800/80 rounded-xl">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto border border-slate-800/80 rounded-xl [scrollbar-color:#334155_transparent] [scrollbar-width:thin]">
+                <table className="w-full text-left text-xs min-w-[720px]">
                   <thead>
                     <tr className="bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-4 font-extrabold">EMPLOYEE</th>
-                      <th className="py-3 px-3 font-extrabold">ROLE</th>
-                      <th className="py-3 px-3 font-extrabold">SENDING EMAIL ACCOUNT</th>
-                      <th className="py-3 px-3 font-extrabold">CONNECTION STATUS</th>
-                      <th className="py-3 px-3 font-extrabold">LAST TESTED</th>
-                      <th className="py-3 px-4 text-right font-extrabold">ACTIONS</th>
+                      <th className="py-3 px-4 font-extrabold whitespace-nowrap min-w-[140px]">EMPLOYEE</th>
+                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[80px]">ROLE</th>
+                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[160px]">SENDING EMAIL ACCOUNT</th>
+                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[140px]">CONNECTION STATUS</th>
+                      <th className="py-3 px-3 font-extrabold whitespace-nowrap min-w-[130px]">LAST TESTED</th>
+                      <th className="py-3 px-4 text-right font-extrabold whitespace-nowrap min-w-[160px]">ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -661,13 +661,13 @@ export default function SettingsPage() {
 
                       return (
                         <tr key={emp.id} className="hover:bg-slate-900/60 transition-colors group">
-                          <td className="py-3.5 px-4">
-                            <div className="font-bold text-white text-xs">{emp.full_name || emp.email}</div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{emp.email}</div>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="font-bold text-white text-xs whitespace-nowrap">{emp.full_name || emp.email}</div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">{emp.email}</div>
                           </td>
 
-                          <td className="py-3.5 px-3">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-block ${
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-block whitespace-nowrap ${
                               emp.role === "admin" 
                                 ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" 
                                 : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
@@ -676,20 +676,20 @@ export default function SettingsPage() {
                             </span>
                           </td>
 
-                          <td className="py-3.5 px-3">
+                          <td className="py-3.5 px-3 whitespace-nowrap">
                             {acct && acct.email ? (
                               <div>
-                                <div className="font-mono text-white text-[11px] font-bold">{acct.email}</div>
-                                <div className="text-[9.5px] text-slate-400 font-semibold">{acct.provider || "Hostinger"}</div>
+                                <div className="font-mono text-white text-[11px] font-bold whitespace-nowrap">{acct.email}</div>
+                                <div className="text-[9.5px] text-slate-400 font-semibold whitespace-nowrap">{acct.provider || "Hostinger"}</div>
                               </div>
                             ) : (
-                              <span className="text-[10px] text-slate-500 italic">Not Configured</span>
+                              <span className="text-[10px] text-slate-500 italic whitespace-nowrap">Not Configured</span>
                             )}
                           </td>
 
-                          <td className="py-3.5 px-3">
+                          <td className="py-3.5 px-3 whitespace-nowrap">
                             {acct && acct.email ? (
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 ${
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 whitespace-nowrap ${
                                 isConnected
                                   ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                   : isFailed
@@ -700,38 +700,38 @@ export default function SettingsPage() {
                                 {isConnected ? "Connected" : isFailed ? "Connection Failed" : (acct.last_test_status || "Configured")}
                               </span>
                             ) : (
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800/80 text-slate-400 border border-slate-700/50 whitespace-nowrap">
                                 No Config
                               </span>
                             )}
                           </td>
 
-                          <td className="py-3.5 px-3">
-                            <div className="text-[10.5px] text-slate-300 font-mono">
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <div className="text-[10.5px] text-slate-300 font-mono whitespace-nowrap">
                               {formattedLastTested}
                             </div>
                           </td>
 
                           {/* 7. ACTIONS WITH 3-DOT MENU */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                               {acct && acct.email ? (
                                 <>
                                   <button
                                     onClick={() => handleTestConnection(emp.id)}
                                     disabled={isTesting}
-                                    className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                    className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
                                     title="Test Email Connection"
                                   >
-                                    {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400" /> : <Zap className="w-3 h-3 text-emerald-400" />}
-                                    <span>{isTesting ? "Testing..." : "Test Connection"}</span>
+                                    {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" /> : <Zap className="w-3 h-3 text-emerald-400 shrink-0" />}
+                                    <span className="whitespace-nowrap">{isTesting ? "Testing..." : "Test Connection"}</span>
                                   </button>
 
                                   {/* 3-Dot Action Menu Button */}
-                                  <div className="relative">
+                                  <div className="relative shrink-0">
                                     <button
                                       onClick={() => setActiveActionMenuId(activeActionMenuId === emp.id ? null : emp.id)}
-                                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all"
+                                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all shrink-0"
                                       title="More Actions"
                                     >
                                       <MoreVertical className="w-4 h-4" />
@@ -795,15 +795,15 @@ export default function SettingsPage() {
                                 <>
                                   <button
                                     onClick={() => handleOpenEmailModal(emp)}
-                                    className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20"
+                                    className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20 whitespace-nowrap shrink-0"
                                   >
-                                    <Mail className="w-3 h-3" /> Configure Email
+                                    <Mail className="w-3 h-3 shrink-0" /> Configure Email
                                   </button>
 
                                   {isAdmin && emp.role !== "admin" && (
                                     <button
                                       onClick={() => handleToggleActive(emp.id)}
-                                      className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-bold transition-all border ${
+                                      className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-bold transition-all border whitespace-nowrap shrink-0 ${
                                         emp.is_active 
                                           ? "bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700" 
                                           : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20"
