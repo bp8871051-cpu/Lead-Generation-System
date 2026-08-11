@@ -59,7 +59,38 @@ export default function SettingsPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showRemoveInactiveModal, setShowRemoveInactiveModal] = useState(false);
-  const [activeActionMenuId, setActiveActionMenuId] = useState<number | null>(null);
+  
+  // Floating Action Menu state (escapes table overflow completely)
+  const [actionMenuState, setActionMenuState] = useState<{ emp: any; top: number; right: number } | null>(null);
+
+  // Close floating menu on scroll or resize
+  useEffect(() => {
+    const handleScrollOrResize = () => {
+      if (actionMenuState) {
+        setActionMenuState(null);
+      }
+    };
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [actionMenuState]);
+
+  const toggleActionMenu = (e: React.MouseEvent, emp: any) => {
+    e.stopPropagation();
+    if (actionMenuState?.emp.id === emp.id) {
+      setActionMenuState(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setActionMenuState({
+        emp,
+        top: rect.bottom + 6,
+        right: Math.max(16, window.innerWidth - rect.right)
+      });
+    }
+  };
 
   const [emailForm, setEmailForm] = useState({
     email: "",
@@ -731,109 +762,40 @@ export default function SettingsPage() {
                           </div>
                         </td>
 
-                        {/* 7. ACTIONS WITH 3-DOT MENU */}
+                        {/* 7. ACTIONS WITH FLOATING 3-DOT MENU */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             {acct && acct.email ? (
-                              <>
-                                <button
-                                  onClick={() => handleTestConnection(emp.id)}
-                                  disabled={isTesting}
-                                  className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
-                                  title="Test Email Connection"
-                                >
-                                  {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" /> : <Zap className="w-3 h-3 text-emerald-400 shrink-0" />}
-                                  <span className="whitespace-nowrap">{isTesting ? "Testing..." : "Test Connection"}</span>
-                                </button>
-
-                                {/* 3-Dot Action Menu Button */}
-                                <div className="relative shrink-0">
-                                  <button
-                                    onClick={() => setActiveActionMenuId(activeActionMenuId === emp.id ? null : emp.id)}
-                                    className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl transition-all shrink-0"
-                                    title="More Actions"
-                                  >
-                                    <MoreVertical className="w-4 h-4" />
-                                  </button>
-
-                                  {activeActionMenuId === emp.id && (
-                                    <>
-                                      <div className="fixed inset-0 z-10" onClick={() => setActiveActionMenuId(null)} />
-                                      <div className="absolute right-0 top-full mt-1.5 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-20 py-1.5 text-xs font-semibold text-left overflow-hidden">
-                                        <button
-                                          onClick={() => {
-                                            setActiveActionMenuId(null);
-                                            handleOpenEmailModal(emp);
-                                          }}
-                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                                        >
-                                          <Settings2 className="w-3.5 h-3.5 text-primary" /> Edit Email
-                                        </button>
-
-                                        <button
-                                          onClick={() => {
-                                            setActiveActionMenuId(null);
-                                            handleTestConnection(emp.id);
-                                          }}
-                                          className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                                        >
-                                          <Zap className="w-3.5 h-3.5 text-emerald-400" /> Test Connection
-                                        </button>
-
-                                        {isAdmin && emp.role !== "admin" && (
-                                          <button
-                                            onClick={() => {
-                                              setActiveActionMenuId(null);
-                                              handleToggleActive(emp.id);
-                                            }}
-                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-                                          >
-                                            <User className="w-3.5 h-3.5 text-amber-400" /> {emp.is_active ? "Deactivate" : "Activate"}
-                                          </button>
-                                        )}
-
-                                        <div className="my-1 border-t border-slate-800" />
-
-                                        {isAdmin && (
-                                          <button
-                                            onClick={() => {
-                                              setActiveActionMenuId(null);
-                                              setRemovingEmailEmployee(emp);
-                                            }}
-                                            className="w-full flex items-center gap-2 px-3.5 py-2 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-bold"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Remove Account
-                                          </button>
-                                        )}
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </>
+                              <button
+                                onClick={() => handleTestConnection(emp.id)}
+                                disabled={isTesting}
+                                className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
+                                title="Test Email Connection"
+                              >
+                                {isTesting ? <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" /> : <Zap className="w-3 h-3 text-emerald-400 shrink-0" />}
+                                <span className="whitespace-nowrap">{isTesting ? "Testing..." : "Test Connection"}</span>
+                              </button>
                             ) : (
-                              <>
-                                <button
-                                  onClick={() => handleOpenEmailModal(emp)}
-                                  className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20 whitespace-nowrap shrink-0"
-                                >
-                                  <Mail className="w-3 h-3 shrink-0" /> Configure Email
-                                </button>
-
-                                {isAdmin && emp.role !== "admin" && (
-                                  <button
-                                    onClick={() => handleToggleActive(emp.id)}
-                                    className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-bold transition-all border whitespace-nowrap shrink-0 ${
-                                      emp.is_active 
-                                        ? "bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700" 
-                                        : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20"
-                                    }`}
-                                    title={emp.is_active ? "Deactivate Employee" : "Activate Employee"}
-                                  >
-                                    {emp.is_active ? "Deactivate" : "Activate"}
-                                  </button>
-                                )}
-                              </>
+                              <button
+                                onClick={() => handleOpenEmailModal(emp)}
+                                className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[10.5px] font-bold inline-flex items-center gap-1.5 transition-all shadow-md shadow-primary/20 whitespace-nowrap shrink-0"
+                              >
+                                <Mail className="w-3 h-3 shrink-0" /> Configure Email
+                              </button>
                             )}
+
+                            {/* 3-Dot Action Menu Button */}
+                            <button
+                              onClick={(e) => toggleActionMenu(e, emp)}
+                              className={`p-1.5 rounded-xl border transition-all shrink-0 ${
+                                actionMenuState?.emp.id === emp.id 
+                                  ? "bg-primary/20 text-white border-primary shadow-md shadow-primary/20" 
+                                  : "bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800"
+                              }`}
+                              title="More Actions"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1405,6 +1367,103 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* FLOATING DROPDOWN ACTION MENU (ESCAPES TABLE OVERFLOW) */}
+      {actionMenuState && (
+        <>
+          <div 
+            className="fixed inset-0 z-40 bg-black/10" 
+            onClick={() => setActionMenuState(null)} 
+          />
+          <div
+            style={{ 
+              top: `${actionMenuState.top}px`, 
+              right: `${actionMenuState.right}px` 
+            }}
+            className="fixed w-52 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-50 py-1.5 text-xs font-semibold text-left overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+          >
+            {actionMenuState.emp.email_account && actionMenuState.emp.email_account.email ? (
+              <>
+                <button
+                  onClick={() => {
+                    const emp = actionMenuState.emp;
+                    setActionMenuState(null);
+                    handleOpenEmailModal(emp);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <Settings2 className="w-4 h-4 text-primary" /> Edit Email Configuration
+                </button>
+
+                <button
+                  onClick={() => {
+                    const emp = actionMenuState.emp;
+                    setActionMenuState(null);
+                    handleTestConnection(emp.id);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <Zap className="w-4 h-4 text-emerald-400" /> Test Connection
+                </button>
+
+                {isAdmin && actionMenuState.emp.role !== "admin" && (
+                  <button
+                    onClick={() => {
+                      const emp = actionMenuState.emp;
+                      setActionMenuState(null);
+                      handleToggleActive(emp.id);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  >
+                    <User className="w-4 h-4 text-amber-400" /> {actionMenuState.emp.is_active ? "Deactivate Employee" : "Activate Employee"}
+                  </button>
+                )}
+
+                <div className="my-1 border-t border-slate-800" />
+
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      const emp = actionMenuState.emp;
+                      setActionMenuState(null);
+                      setRemovingEmailEmployee(emp);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors font-bold"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" /> Remove Email Account
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    const emp = actionMenuState.emp;
+                    setActionMenuState(null);
+                    handleOpenEmailModal(emp);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-primary-light hover:bg-primary/10 transition-colors font-bold"
+                >
+                  <Mail className="w-4 h-4 text-primary" /> Configure Email Account
+                </button>
+
+                {isAdmin && actionMenuState.emp.role !== "admin" && (
+                  <button
+                    onClick={() => {
+                      const emp = actionMenuState.emp;
+                      setActionMenuState(null);
+                      handleToggleActive(emp.id);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                  >
+                    <User className="w-4 h-4 text-amber-400" /> {actionMenuState.emp.is_active ? "Deactivate Employee" : "Activate Employee"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
       )}
 
     </div>
