@@ -32,18 +32,21 @@ logger = logging.getLogger("leadai.smtp")
 logger.setLevel(logging.INFO)
 
 
-def resolve_ipv4_host(host: str) -> str:
+def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 15.0):
     """
-    Resolves a hostname (e.g., smtp.gmail.com) directly to an IPv4 IP address.
-    Prevents IPv6 socket timeouts on dual-stack Windows/ISP networks.
+    Creates a clean SMTP or SMTP_SSL connection to the target host.
     """
-    try:
-        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
-        if infos and len(infos) > 0:
-            return infos[0][4][0]
-    except Exception:
-        pass
-    return host
+    enc_upper = (encryption or "TLS").upper()
+    logger.info(f"[SMTP START] Connecting host={host}, port={port}, encryption={enc_upper}")
+    if port == 465 or enc_upper == "SSL":
+        server = smtplib.SMTP_SSL(host, port or 465, timeout=timeout)
+    else:
+        server = smtplib.SMTP(host, port or 587, timeout=timeout)
+        server.ehlo()
+        if enc_upper != "NONE":
+            server.starttls()
+            server.ehlo()
+    return server
 
 
 def normalize_app_passwords(pass_str: str) -> List[str]:
@@ -61,37 +64,6 @@ def normalize_app_passwords(pass_str: str) -> List[str]:
     if i_to_l not in candidates:
         candidates.append(i_to_l)
     return candidates
-
-
-def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 10.0):
-    """
-    Creates an SMTP or SMTP_SSL connection enforcing IPv4 resolution and host SSL verification.
-    """
-    enc_upper = (encryption or "TLS").upper()
-    target_ip = resolve_ipv4_host(host)
-
-    logger.info(f"[SMTP START] Connecting host={host} (IP={target_ip}), port={port}, encryption={enc_upper}")
-
-    orig_getaddrinfo = socket.getaddrinfo
-
-    def forced_ipv4_getaddrinfo(h, p, family=0, type=0, proto=0, flags=0):
-        if h == host:
-            return orig_getaddrinfo(target_ip, p, socket.AF_INET, type, proto, flags)
-        return orig_getaddrinfo(h, p, family, type, proto, flags)
-
-    socket.getaddrinfo = forced_ipv4_getaddrinfo
-    try:
-        if port == 465 or enc_upper == "SSL":
-            server = smtplib.SMTP_SSL(host, port or 465, timeout=timeout)
-        else:
-            server = smtplib.SMTP(host, port or 587, timeout=timeout)
-            server.ehlo()
-            if enc_upper != "NONE":
-                server.starttls()
-                server.ehlo()
-        return server
-    finally:
-        socket.getaddrinfo = orig_getaddrinfo
 
 
 def test_http_email_api(account: EmployeeEmailAccount, api_key: str) -> dict:
