@@ -61,8 +61,21 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     if (resolvedId) {
       loadLeadDetails();
+      loadActiveSenders();
     }
   }, [resolvedId]);
+
+  const loadActiveSenders = async () => {
+    try {
+      const senders = await emailService.getActiveSenders();
+      setActiveSenders(senders || []);
+      if (senders && senders.length > 0) {
+        setSelectedEmployeeId(senders[0].employee_id);
+      }
+    } catch (err) {
+      console.error("Failed to load active senders:", err);
+    }
+  };
 
   const loadLeadDetails = async () => {
     if (!resolvedId) return;
@@ -159,7 +172,7 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
         bodyText = lines.slice(1).join("\n").trim();
       }
 
-      await emailService.sendEmail({
+      const res = await emailService.sendEmail({
         lead_id: lead.id,
         subject,
         body: bodyText,
@@ -168,9 +181,10 @@ export default function LeadDetailsPage({ params }: { params: Promise<{ id: stri
       });
 
       setLead((prev: any) => ({ ...prev, status: "Contacted" }));
+      const senderText = res?.sender_email ? `from ${res.sender_email}` : "using company SMTP";
       setSmtpFeedback({
         type: "success",
-        message: `Outreach email sent successfully using company SMTP!`
+        message: res?.message || `Outreach email sent successfully ${senderText}!`
       });
 
       try {
