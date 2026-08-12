@@ -210,6 +210,59 @@ try:
         bhaumik_acct.sender_name = "Bhaumik Prajapati"
         bhaumik_acct.is_active = True
         db.commit()
+
+    # 4. Employee User & Email Account Seeding (Sumedha Agrawal - sumedha.blueboxx@gmail.com)
+    sumedha_pw = bcrypt.hashpw("Sumedha@123".encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
+    sumedha_user = db.query(User).filter(User.email == "sumedha.blueboxx@gmail.com").first()
+    if not sumedha_user:
+        sumedha_user = User(
+            email="sumedha.blueboxx@gmail.com",
+            full_name="Sumedha Agrawal",
+            designation="Digital Marketing Specialist",
+            hashed_password=sumedha_pw,
+            role="employee",
+            is_active=True
+        )
+        db.add(sumedha_user)
+        db.commit()
+        db.refresh(sumedha_user)
+    else:
+        sumedha_user.full_name = "Sumedha Agrawal"
+        sumedha_user.designation = "Digital Marketing Specialist"
+        sumedha_user.role = "employee"
+        sumedha_user.hashed_password = sumedha_pw
+        sumedha_user.is_active = True
+        db.commit()
+
+    sumedha_acct = db.query(EmployeeEmailAccount).filter(EmployeeEmailAccount.employee_id == sumedha_user.id).first()
+    if not sumedha_acct:
+        sumedha_acct = EmployeeEmailAccount(
+            employee_id=sumedha_user.id,
+            email="sumedha.blueboxx@gmail.com",
+            provider="Gmail",
+            authentication_method="SMTP",
+            smtp_host="smtp.gmail.com",
+            smtp_port=587,
+            encryption="TLS",
+            smtp_username="sumedha.blueboxx@gmail.com",
+            encrypted_smtp_password=encrypt_credential("xuiw Irsp ywwr vzyy"),
+            sender_name="Sumedha Agrawal",
+            is_active=True,
+            is_default=False
+        )
+        db.add(sumedha_acct)
+        db.commit()
+    else:
+        sumedha_acct.email = "sumedha.blueboxx@gmail.com"
+        sumedha_acct.provider = "Gmail"
+        sumedha_acct.smtp_host = "smtp.gmail.com"
+        sumedha_acct.smtp_port = 587
+        sumedha_acct.encryption = "TLS"
+        sumedha_acct.smtp_username = "sumedha.blueboxx@gmail.com"
+        sumedha_acct.encrypted_smtp_password = encrypt_credential("xuiw Irsp ywwr vzyy")
+        sumedha_acct.sender_name = "Sumedha Agrawal"
+        sumedha_acct.is_active = True
+        db.commit()
 except Exception as e:
     db.rollback()
 finally:
