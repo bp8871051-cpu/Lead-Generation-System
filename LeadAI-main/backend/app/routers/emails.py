@@ -32,16 +32,54 @@ logger = logging.getLogger("leadai.smtp")
 logger.setLevel(logging.INFO)
 
 
-def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 15.0):
+def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 12.0):
     """
-    Creates a clean SMTP or SMTP_SSL connection to the target host.
+    Creates an SMTP or SMTP_SSL connection to the target host.
+    Handles dual-stack IPv6 [Errno 101] Network is unreachable by falling back to IPv4.
     """
     enc_upper = (encryption or "TLS").upper()
-    logger.info(f"[SMTP START] Connecting host={host}, port={port}, encryption={enc_upper}")
-    if port == 465 or enc_upper == "SSL":
-        server = smtplib.SMTP_SSL(host, port or 465, timeout=timeout)
+    target_port = port or (465 if enc_upper == "SSL" else 587)
+    logger.info(f"[SMTP START] Connecting host={host}, port={target_port}, encryption={enc_upper}")
+
+    # 1. Try standard hostname connection first
+    try:
+        if target_port == 465 or enc_upper == "SSL":
+            return smtplib.SMTP_SSL(host, target_port, timeout=timeout)
+        else:
+            server = smtplib.SMTP(host, target_port, timeout=timeout)
+            server.ehlo()
+            if enc_upper != "NONE":
+                server.starttls()
+                server.ehlo()
+            return server
+    except (OSError, socket.error, smtplib.SMTPException) as err:
+        logger.warning(f"[SMTP DUAL-STACK FALLBACK] Host={host}:{target_port} failed with '{err}'. Retrying via IPv4...")
+
+    # 2. IPv4-only fallback resolution for dual-stack network issues
+    try:
+        infos = socket.getaddrinfo(host, target_port, socket.AF_INET, socket.SOCK_STREAM)
+        for info in infos:
+            ip = info[4][0]
+            try:
+                if target_port == 465 or enc_upper == "SSL":
+                    return smtplib.SMTP_SSL(ip, target_port, timeout=timeout)
+                else:
+                    server = smtplib.SMTP(ip, target_port, timeout=timeout)
+                    server.ehlo(host)
+                    if enc_upper != "NONE":
+                        server.starttls()
+                        server.ehlo(host)
+                    return server
+            except Exception:
+                continue
+    except Exception as e:
+        logger.warning(f"[SMTP IPv4 FALLBACK FAILED] {e}")
+
+    # 3. Final attempt
+    if target_port == 465 or enc_upper == "SSL":
+        return smtplib.SMTP_SSL(host, target_port, timeout=timeout)
     else:
-        server = smtplib.SMTP(host, port or 587, timeout=timeout)
+        server = smtplib.SMTP(host, target_port, timeout=timeout)
         server.ehlo()
         if enc_upper != "NONE":
             server.starttls()
@@ -692,6 +730,9 @@ def send_outreach_email(
                     last_smtp_error = str(e)
                     if "timed out" in str(e).lower() or isinstance(e, (socket.timeout, TimeoutError)):
                         is_timeout = True
+
+            if sent_successfully:
+                break
 
         # Fallback to Brevo HTTPS API ONLY IF raw SMTP ports are blocked (e.g. Render Free Tier)
         if not sent_successfully and is_timeout:
