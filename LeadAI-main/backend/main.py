@@ -245,7 +245,7 @@ try:
             smtp_port=587,
             encryption="TLS",
             smtp_username="sumedha.blueboxx@gmail.com",
-            encrypted_smtp_password=encrypt_credential("xuiw Irsp ywwr vzyy"),
+            encrypted_smtp_password=encrypt_credential("xuiwlrspywwrvzyy"),
             sender_name="Sumedha Agrawal",
             is_active=True,
             is_default=False
@@ -259,7 +259,7 @@ try:
         sumedha_acct.smtp_port = 587
         sumedha_acct.encryption = "TLS"
         sumedha_acct.smtp_username = "sumedha.blueboxx@gmail.com"
-        sumedha_acct.encrypted_smtp_password = encrypt_credential("xuiw Irsp ywwr vzyy")
+        sumedha_acct.encrypted_smtp_password = encrypt_credential("xuiwlrspywwrvzyy")
         sumedha_acct.sender_name = "Sumedha Agrawal"
         sumedha_acct.is_active = True
         db.commit()

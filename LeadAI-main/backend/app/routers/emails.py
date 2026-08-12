@@ -44,6 +44,23 @@ def resolve_ipv4_host(host: str) -> str:
     return host
 
 
+def normalize_app_passwords(pass_str: str) -> List[str]:
+    """
+    Returns candidate strings for Google/SMTP passwords to handle spacing & typo variations.
+    """
+    if not pass_str:
+        return []
+    cleaned = pass_str.strip()
+    candidates = [cleaned]
+    no_space = cleaned.replace(" ", "")
+    if no_space not in candidates:
+        candidates.append(no_space)
+    i_to_l = no_space.replace("I", "l")
+    if i_to_l not in candidates:
+        candidates.append(i_to_l)
+    return candidates
+
+
 def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 10.0):
     """
     Creates an SMTP or SMTP_SSL connection enforcing IPv4 resolution and host SSL verification.
@@ -191,40 +208,46 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
     last_error_code = "SMTP_CONNECTION_TIMEOUT"
     last_error_msg = ""
 
+    pw_candidates = normalize_app_passwords(decrypted_pw)
+
     for port, enc in ports_to_try:
         logger.info(f"[SMTP TRY] Testing account={account.email}, host={account.smtp_host}, port={port}, encryption={enc}")
         try:
-            server = create_smtp_server(
-                host=account.smtp_host,
-                port=port,
-                encryption=enc,
-                timeout=10.0
-            )
-            server.login(account.smtp_username, decrypted_pw.strip())
-            server.quit()
+            for pw_cand in pw_candidates:
+                try:
+                    server = create_smtp_server(
+                        host=account.smtp_host,
+                        port=port,
+                        encryption=enc,
+                        timeout=10.0
+                    )
+                    server.login(account.smtp_username, pw_cand)
+                    server.quit()
 
-            # Auto-save working port & encryption if alternate port succeeded
-            if port != account.smtp_port or enc != account.encryption:
-                account.smtp_port = port
-                account.encryption = enc
+                    # Auto-save working password variant & port/encryption
+                    if pw_cand != decrypted_pw:
+                        account.encrypted_smtp_password = encrypt_credential(pw_cand)
+                    if port != account.smtp_port or enc != account.encryption:
+                        account.smtp_port = port
+                        account.encryption = enc
 
-            status_msg = "Connected"
-            logger.info(f"[SMTP SUCCESS] Authenticated account={account.email}, host={account.smtp_host}:{port} ({enc})")
-            account.last_tested_at = datetime.utcnow()
-            account.last_test_status = status_msg
-            db.commit()
-            return {
-                "status": "success",
-                "error_code": None,
-                "message": f"Successfully authenticated with {account.smtp_host}:{port} ({enc})",
-                "last_tested_at": account.last_tested_at.isoformat(),
-                "last_test_status": status_msg
-            }
-        except smtplib.SMTPAuthenticationError as e:
-            last_error_code = "SMTP_AUTH_FAILED"
-            last_error_msg = f"Invalid credentials or App Password required for user '{account.smtp_username}'"
-            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={last_error_msg}")
-            break
+                    status_msg = "Connected"
+                    logger.info(f"[SMTP SUCCESS] Authenticated account={account.email}, host={account.smtp_host}:{port} ({enc})")
+                    account.last_tested_at = datetime.utcnow()
+                    account.last_test_status = status_msg
+                    db.commit()
+                    return {
+                        "status": "success",
+                        "error_code": None,
+                        "message": f"Successfully authenticated with {account.smtp_host}:{port} ({enc})",
+                        "last_tested_at": account.last_tested_at.isoformat(),
+                        "last_test_status": status_msg
+                    }
+                except smtplib.SMTPAuthenticationError as e:
+                    last_error_code = "SMTP_AUTH_FAILED"
+                    last_error_msg = f"Invalid credentials or App Password required for user '{account.smtp_username}'"
+                    logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={last_error_msg}")
+                    continue
         except (ssl.SSLError if 'ssl' in globals() else Exception) as e:
             last_error_code = "SMTP_TLS_ERROR"
             last_error_msg = f"TLS/SSL Handshake Error on {account.smtp_host}:{port} - {str(e)}"
@@ -609,7 +632,7 @@ def send_outreach_email(
     key_clean = smtp_pass.strip() if smtp_pass else ""
 
     # 1. Primary Production Route: Brevo HTTPS API (Port 443)
-    if key_clean.startswith("xkeysib-") or provider_name.upper() == "BREVO" or getattr(settings, "BREVO_API_KEY", "").startswith("xkeysib-"):
+    if key_clean.startswith("xkeysib-") or provider_name.upper() == "BREVO":
         res = BrevoEmailService.send_transactional_email(
             sender_name=sender_name,
             sender_email=sender_email,
@@ -647,7 +670,7 @@ def send_outreach_email(
         except Exception as e:
             last_smtp_error = f"Resend API Error: {str(e)}"
 
-    # 3. Fallback Route for Local Development (SMTP)
+    # 3. Direct SMTP Transmission (Gmail, Hostinger, Custom SMTP)
     else:
         primary_port = smtp_port or (465 if (encryption or "").upper() == "SSL" else 587)
         primary_enc = encryption or ("SSL" if primary_port == 465 else "TLS")
@@ -657,26 +680,54 @@ def send_outreach_email(
             (2525, "TLS")
         ]
 
-        for port, enc in ports_to_try:
-            try:
-                msg = MIMEMultipart('alternative')
-                from_formatted = f"{sender_name} <{sender_email}>"
-                msg['From'] = from_formatted
-                msg['To'] = req.recipient_email
-                msg['Subject'] = req.subject
-                msg.attach(MIMEText(final_body, 'html'))
+        pw_candidates = normalize_app_passwords(smtp_pass)
+        is_timeout = False
 
-                server = create_smtp_server(smtp_host, port, encryption=enc, timeout=7.0)
-                server.login(smtp_user, smtp_pass.strip())
-                server.sendmail(sender_email, req.recipient_email, msg.as_string())
-                server.quit()
-                sent_successfully = True
+        for port, enc in ports_to_try:
+            if sent_successfully:
                 break
-            except smtplib.SMTPAuthenticationError:
-                last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'. If using Gmail, please use a 16-character App Password."
-                break
-            except Exception as e:
-                last_smtp_error = str(e)
+            for pw_candidate in pw_candidates:
+                try:
+                    msg = MIMEMultipart('alternative')
+                    msg['From'] = f"{sender_name} <{sender_email}>"
+                    msg['To'] = req.recipient_email
+                    msg['Reply-To'] = sender_email
+                    msg['Subject'] = req.subject
+                    msg.attach(MIMEText(final_body, 'html', 'utf-8'))
+
+                    server = create_smtp_server(smtp_host, port, encryption=enc, timeout=10.0)
+                    server.login(smtp_user, pw_candidate)
+                    server.sendmail(sender_email, [req.recipient_email], msg.as_string())
+                    server.quit()
+
+                    sent_successfully = True
+                    provider_name = f"SMTP ({smtp_host}:{port})"
+                    break
+                except smtplib.SMTPAuthenticationError:
+                    last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'. If using Gmail, please verify your 16-character App Password."
+                    continue
+                except Exception as e:
+                    last_smtp_error = str(e)
+                    if "timed out" in str(e).lower() or isinstance(e, (socket.timeout, TimeoutError)):
+                        is_timeout = True
+
+        # Fallback to Brevo HTTPS API ONLY IF raw SMTP ports are blocked (e.g. Render Free Tier)
+        if not sent_successfully and is_timeout:
+            brevo_key = getattr(settings, "BREVO_API_KEY", "")
+            if brevo_key.startswith("xkeysib-"):
+                logger.info(f"[SMTP FALLBACK TO BREVO] SMTP timed out on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
+                res = BrevoEmailService.send_transactional_email(
+                    sender_name=sender_name,
+                    sender_email=sender_email,
+                    recipient_email=req.recipient_email,
+                    subject=req.subject,
+                    html_content=final_body,
+                    custom_api_key=brevo_key
+                )
+                if res["status"] == "success":
+                    sent_successfully = True
+                    brevo_message_id = res.get("message_id")
+                    provider_name = "Brevo HTTPS API (SMTP Fallback)"
 
 
     default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
