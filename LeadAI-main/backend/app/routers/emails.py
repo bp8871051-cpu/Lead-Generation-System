@@ -8,6 +8,8 @@ import ssl
 import json
 import urllib.request
 import logging
+import re
+import email.utils
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -693,6 +695,14 @@ def send_outreach_email(
                     msg['To'] = req.recipient_email
                     msg['Reply-To'] = sender_email
                     msg['Subject'] = req.subject
+                    msg['Date'] = email.utils.formatdate(localtime=True)
+                    msg['Message-ID'] = email.utils.make_msgid(domain=sender_email.split('@')[-1] if '@' in sender_email else 'gmail.com')
+                    msg['MIME-Version'] = '1.0'
+
+                    plain_text = re.sub(r'<[^>]+>', '', final_body)
+                    plain_text = re.sub(r'\n\s*\n', '\n\n', plain_text).strip()
+
+                    msg.attach(MIMEText(plain_text, 'plain', 'utf-8'))
                     msg.attach(MIMEText(final_body, 'html', 'utf-8'))
 
                     server = create_smtp_server(smtp_host, port, encryption=enc, timeout=10.0)
