@@ -20,7 +20,7 @@ from app.schemas import (
 from app.routers.auth import get_current_user
 from app.services import AILeadAnalyzerService
 from app.brevo_service import BrevoEmailService
-from app.security_utils import decrypt_credential
+from app.security_utils import encrypt_credential, decrypt_credential
 from app.config import settings
 
 
