@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional
+import os
 import socket
 import smtplib
 import ssl
@@ -35,7 +36,7 @@ logger.setLevel(logging.INFO)
 def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 12.0):
     """
     Creates an SMTP or SMTP_SSL connection to the target host.
-    Handles dual-stack IPv6 [Errno 101] Network is unreachable by falling back to IPv4.
+    Handles dual-stack IPv6 [Errno 101] Network is unreachable by falling back to IPv4 with proper SSL context.
     """
     enc_upper = (encryption or "TLS").upper()
     target_port = port or (465 if enc_upper == "SSL" else 587)
@@ -61,16 +62,20 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
         for info in infos:
             ip = info[4][0]
             try:
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
                 if target_port == 465 or enc_upper == "SSL":
-                    server = smtplib.SMTP_SSL(ip, target_port, timeout=timeout)
+                    server = smtplib.SMTP_SSL(ip, target_port, timeout=timeout, context=ssl_ctx)
                 else:
                     server = smtplib.SMTP(ip, target_port, timeout=timeout)
                     server.ehlo(host)
                     if enc_upper != "NONE":
-                        server.starttls()
+                        server.starttls(context=ssl_ctx)
                         server.ehlo(host)
                 return server
-            except Exception:
+            except Exception as ex:
+                logger.warning(f"[SMTP IPv4 ATTEMPT FAILED for {ip}] {ex}")
                 continue
     except Exception as e:
         logger.warning(f"[SMTP IPv4 FALLBACK FAILED] {e}")
@@ -700,13 +705,16 @@ def send_outreach_email(
                 break
             for pw_candidate in pw_candidates:
                 try:
+                    recipient_clean = req.recipient_email.strip()
+                    sender_clean = sender_email.strip()
+
                     msg = MIMEMultipart('alternative')
-                    msg['From'] = f"{sender_name} <{sender_email}>"
-                    msg['To'] = req.recipient_email
-                    msg['Reply-To'] = sender_email
+                    msg['From'] = email.utils.formataddr((sender_name, sender_clean))
+                    msg['To'] = recipient_clean
+                    msg['Reply-To'] = sender_clean
                     msg['Subject'] = req.subject
                     msg['Date'] = email.utils.formatdate(localtime=True)
-                    msg['Message-ID'] = email.utils.make_msgid(domain=sender_email.split('@')[-1] if '@' in sender_email else 'gmail.com')
+                    msg['Message-ID'] = email.utils.make_msgid(domain=sender_clean.split('@')[-1] if '@' in sender_clean else 'gmail.com')
                     msg['MIME-Version'] = '1.0'
 
                     plain_text = re.sub(r'<[^>]+>', '', final_body)
@@ -717,8 +725,17 @@ def send_outreach_email(
 
                     server = create_smtp_server(smtp_host, port, encryption=enc, timeout=10.0)
                     server.login(smtp_user, pw_candidate)
-                    server.sendmail(sender_email, [req.recipient_email], msg.as_string())
-                    server.quit()
+                    refused = server.sendmail(sender_clean, [recipient_clean], msg.as_string())
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+
+                    if refused:
+                        refused_details = "; ".join([f"{rcpt}: {code} {m.decode('utf-8', errors='ignore') if isinstance(m, bytes) else m}" for rcpt, (code, m) in refused.items()])
+                        logger.error(f"[SMTP REJECTED] Delivery refused for recipient(s): {refused_details}")
+                        last_smtp_error = f"Recipient delivery refused by SMTP server: {refused_details}"
+                        continue
 
                     sent_successfully = True
                     provider_name = f"SMTP ({smtp_host}:{port})"

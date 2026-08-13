@@ -87,9 +87,13 @@ class BrevoEmailService:
         if not key:
             return {"status": "failed", "error_message": "Brevo API Key is missing or unconfigured."}
 
+        sender_email = (sender_email or "").strip()
+        recipient_email = (recipient_email or "").strip()
+        sender_name = (sender_name or "BLUEBOXX Team").strip()
+
         payload = {
             "sender": {
-                "name": sender_name or "BLUEBOXX Team",
+                "name": sender_name,
                 "email": sender_email
             },
             "to": [
