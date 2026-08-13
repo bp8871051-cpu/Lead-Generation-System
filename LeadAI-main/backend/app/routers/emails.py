@@ -33,54 +33,59 @@ logger = logging.getLogger("leadai.smtp")
 logger.setLevel(logging.INFO)
 
 
+def connect_ipv4_socket(host: str, port: int, timeout: float = 10.0) -> socket.socket:
+    """
+    Forcefully resolves host using AF_INET (IPv4) to avoid dual-stack IPv6 [Errno 101] Network is unreachable errors.
+    """
+    infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    last_err = None
+    for family, type_, proto, canonname, sockaddr in infos:
+        try:
+            s = socket.socket(family, type_, proto)
+            s.settimeout(timeout)
+            s.connect(sockaddr)
+            return s
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err or socket.error(f"Failed to connect to {host}:{port} via IPv4")
+
+
 def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: float = 12.0):
     """
     Creates an SMTP or SMTP_SSL connection to the target host.
-    Handles dual-stack IPv6 [Errno 101] Network is unreachable by falling back to IPv4 with proper SSL context.
+    Handles dual-stack IPv6 [Errno 101] Network is unreachable by prioritizing direct IPv4 socket connections.
     """
     enc_upper = (encryption or "TLS").upper()
     target_port = port or (465 if enc_upper == "SSL" else 587)
     logger.info(f"[SMTP START] Connecting host={host}, port={target_port}, encryption={enc_upper}")
 
-    # 1. Try standard hostname connection first
+    # 1. Try direct IPv4 socket connection first (bypasses IPv6 unreachable network issue)
     try:
+        sock = connect_ipv4_socket(host, target_port, timeout=timeout)
         if target_port == 465 or enc_upper == "SSL":
-            return smtplib.SMTP_SSL(host, target_port, timeout=timeout)
+            ssl_ctx = ssl.create_default_context()
+            ssl_sock = ssl_ctx.wrap_socket(sock, server_hostname=host)
+            server = smtplib.SMTP_SSL(timeout=timeout)
+            server._host = host
+            server.sock = ssl_sock
+            server.file = None
+            server.ehlo(host)
+            return server
         else:
-            server = smtplib.SMTP(host, target_port, timeout=timeout)
-            server.ehlo()
+            server = smtplib.SMTP(timeout=timeout)
+            server._host = host
+            server.sock = sock
+            server.file = None
+            server.ehlo(host)
             if enc_upper != "NONE":
                 server.starttls()
-                server.ehlo()
+                server.ehlo(host)
             return server
-    except (OSError, socket.error, smtplib.SMTPException) as err:
-        logger.warning(f"[SMTP DUAL-STACK FALLBACK] Host={host}:{target_port} failed with '{err}'. Retrying via IPv4...")
+    except Exception as err:
+        logger.warning(f"[SMTP IPv4 FIRST FAILED] Host={host}:{target_port} - '{err}'. Retrying standard connection...")
 
-    # 2. IPv4-only fallback resolution for dual-stack network issues
-    try:
-        infos = socket.getaddrinfo(host, target_port, socket.AF_INET, socket.SOCK_STREAM)
-        for info in infos:
-            ip = info[4][0]
-            try:
-                ssl_ctx = ssl.create_default_context()
-                ssl_ctx.check_hostname = False
-                ssl_ctx.verify_mode = ssl.CERT_NONE
-                if target_port == 465 or enc_upper == "SSL":
-                    server = smtplib.SMTP_SSL(ip, target_port, timeout=timeout, context=ssl_ctx)
-                else:
-                    server = smtplib.SMTP(ip, target_port, timeout=timeout)
-                    server.ehlo(host)
-                    if enc_upper != "NONE":
-                        server.starttls(context=ssl_ctx)
-                        server.ehlo(host)
-                return server
-            except Exception as ex:
-                logger.warning(f"[SMTP IPv4 ATTEMPT FAILED for {ip}] {ex}")
-                continue
-    except Exception as e:
-        logger.warning(f"[SMTP IPv4 FALLBACK FAILED] {e}")
-
-    # 3. Final attempt
+    # 2. Standard fallback attempt
     if target_port == 465 or enc_upper == "SSL":
         return smtplib.SMTP_SSL(host, target_port, timeout=timeout)
     else:
