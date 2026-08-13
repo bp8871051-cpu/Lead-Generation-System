@@ -62,14 +62,14 @@ def create_smtp_server(host: str, port: int, encryption: str = "TLS", timeout: f
             ip = info[4][0]
             try:
                 if target_port == 465 or enc_upper == "SSL":
-                    return smtplib.SMTP_SSL(ip, target_port, timeout=timeout)
+                    server = smtplib.SMTP_SSL(ip, target_port, timeout=timeout)
                 else:
                     server = smtplib.SMTP(ip, target_port, timeout=timeout)
                     server.ehlo(host)
                     if enc_upper != "NONE":
                         server.starttls()
                         server.ehlo(host)
-                    return server
+                return server
             except Exception:
                 continue
     except Exception as e:
@@ -280,7 +280,7 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
                 last_error_msg = str(e)
             logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
 
-    if last_error_code == "SMTP_CONNECTION_TIMEOUT":
+    if last_error_code in ["SMTP_CONNECTION_TIMEOUT", "SMTP_HOST_UNREACHABLE"]:
         brevo_check = BrevoEmailService.verify_api_key()
         if brevo_check["status"] == "success":
             status_msg = "Connected"
@@ -728,17 +728,18 @@ def send_outreach_email(
                     continue
                 except Exception as e:
                     last_smtp_error = str(e)
-                    if "timed out" in str(e).lower() or isinstance(e, (socket.timeout, TimeoutError)):
+                    err_str = str(e).lower()
+                    if "timed out" in err_str or "unreachable" in err_str or "errno 101" in err_str or "refused" in err_str or isinstance(e, (socket.timeout, TimeoutError, socket.error, OSError)):
                         is_timeout = True
 
             if sent_successfully:
                 break
 
-        # Fallback to Brevo HTTPS API ONLY IF raw SMTP ports are blocked (e.g. Render Free Tier)
+        # Fallback to Brevo HTTPS API IF raw SMTP ports are blocked or unreachable (e.g. Render Free Tier / Live Cloud Hosts)
         if not sent_successfully and is_timeout:
-            brevo_key = getattr(settings, "BREVO_API_KEY", "")
+            brevo_key = getattr(settings, "BREVO_API_KEY", "") or os.getenv("BREVO_API_KEY", "")
             if brevo_key.startswith("xkeysib-"):
-                logger.info(f"[SMTP FALLBACK TO BREVO] SMTP timed out on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
+                logger.info(f"[SMTP FALLBACK TO BREVO] Direct SMTP failed ({last_smtp_error}) on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
                 res = BrevoEmailService.send_transactional_email(
                     sender_name=sender_name,
                     sender_email=sender_email,
@@ -797,5 +798,5 @@ def send_outreach_email(
         db.commit()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to send email using account '{sender_email}' via {smtp_host}: {last_smtp_error or 'Connection timed out'}"
+            detail=f"Failed to send email using account '{sender_email}' via {smtp_host}: {last_smtp_error or 'Connection timed out'}. Note: Live cloud hosting (Render/AWS/Vercel) blocks raw SMTP ports 587/465. Set BREVO_API_KEY in environment variables or select Brevo HTTP API for seamless Port 443 delivery."
         )
