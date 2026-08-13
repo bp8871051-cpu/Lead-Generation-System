@@ -753,22 +753,26 @@ def send_outreach_email(
                 break
 
         # Fallback to Brevo HTTPS API IF raw SMTP ports are blocked or unreachable (e.g. Render Free Tier / Live Cloud Hosts)
+        # ONLY fallback for custom company domain senders, NEVER for @gmail.com / @yahoo.com / @outlook.com
+        # because Brevo drops third-party webmail domain senders unless manually verified on Brevo.
         if not sent_successfully and is_timeout:
-            brevo_key = getattr(settings, "BREVO_API_KEY", "") or os.getenv("BREVO_API_KEY", "")
-            if brevo_key.startswith("xkeysib-"):
-                logger.info(f"[SMTP FALLBACK TO BREVO] Direct SMTP failed ({last_smtp_error}) on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
-                res = BrevoEmailService.send_transactional_email(
-                    sender_name=sender_name,
-                    sender_email=sender_email,
-                    recipient_email=req.recipient_email,
-                    subject=req.subject,
-                    html_content=final_body,
-                    custom_api_key=brevo_key
-                )
-                if res["status"] == "success":
-                    sent_successfully = True
-                    brevo_message_id = res.get("message_id")
-                    provider_name = "Brevo HTTPS API (SMTP Fallback)"
+            sender_domain = (sender_email.split('@')[-1] if '@' in sender_email else "").lower()
+            if sender_domain not in ["gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"]:
+                brevo_key = getattr(settings, "BREVO_API_KEY", "") or os.getenv("BREVO_API_KEY", "")
+                if brevo_key.startswith("xkeysib-"):
+                    logger.info(f"[SMTP FALLBACK TO BREVO] Direct SMTP failed ({last_smtp_error}) on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
+                    res = BrevoEmailService.send_transactional_email(
+                        sender_name=sender_name,
+                        sender_email=sender_email,
+                        recipient_email=req.recipient_email,
+                        subject=req.subject,
+                        html_content=final_body,
+                        custom_api_key=brevo_key
+                    )
+                    if res["status"] == "success":
+                        sent_successfully = True
+                        brevo_message_id = res.get("message_id")
+                        provider_name = "Brevo HTTPS API (SMTP Fallback)"
 
 
     default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
