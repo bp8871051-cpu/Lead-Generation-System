@@ -82,8 +82,8 @@ def run_brevo_test_suite():
         assert "message_id" in send_res and send_res["message_id"], "Missing Brevo messageId!"
         print(f"PASS: Real email delivered! Brevo messageId: {send_res['message_id']}")
 
-        # 5. Campaign Email Sending & Log Verification (Checking messageId in database)
-        print("\n--- TEST 5: Campaign Outreach Email & Log Verification ---")
+        # 5. FIRST EMAIL: Campaign Outreach Email & Log Verification
+        print("\n--- TEST 5: FIRST EMAIL - Outreach Email & Log Verification ---")
         biz = db.query(Business).first()
         if not biz:
             biz = Business(name="Test Client Business", email="bhaumik2652005@gmail.com", google_rating=4.8)
@@ -98,36 +98,54 @@ def run_brevo_test_suite():
             db.commit()
             db.refresh(lead)
 
-        req = EmailSendRequest(
+        req_first = EmailSendRequest(
             lead_id=lead.id,
-            subject="LeadAI CRM Campaign Outreach Test via Brevo",
-            body="<p>Dear Client, this campaign outreach was transmitted natively via Brevo.</p>",
+            subject="First Email Outreach Test via Brevo HTTP API",
+            body="<p>Dear Client, this is our initial outreach pitch transmitted via Brevo HTTPS API.</p>",
             recipient_email="bhaumik2652005@gmail.com",
             employee_id=user.id
         )
-        outreach_res = send_outreach_email(req=req, db=db, current_user=user)
-        print("Outreach Response:", outreach_res)
+        outreach_res = send_outreach_email(req=req_first, db=db, current_user=user)
+        print("First Email Response:", outreach_res)
         
         # Verify provider_message_id saved in DB
         last_email_log = db.query(Email).filter(Email.sender_id == user.id).order_by(Email.created_at.desc()).first()
         print(f"Database Log ID: {last_email_log.id} | Status: {last_email_log.status} | Provider: {last_email_log.provider} | MessageId: {last_email_log.provider_message_id}")
         assert last_email_log.status == "Sent", "Email log status is not 'Sent'!"
         assert last_email_log.provider_message_id, "Brevo messageId was not saved in database!"
-        print("PASS: Campaign email sent and Brevo messageId logged in database!")
+        print("PASS: First email sent via Brevo HTTP API and logged in database!")
 
-        # 6. Invalid API Key Error Handling
-        print("\n--- TEST 6: Invalid API Key Error Handling ---")
+        # 6. SECOND EMAIL / FOLLOW-UP: Verify Follow-up Email uses Brevo HTTP API
+        print("\n--- TEST 6: SECOND EMAIL / FOLLOW-UP - Brevo HTTP API Transmission ---")
+        req_followup = EmailSendRequest(
+            lead_id=lead.id,
+            subject="Second Email Follow-up Test via Brevo HTTP API",
+            body="<p>Hi Client, following up on our previous note regarding your web presence optimization.</p>",
+            recipient_email="bhaumik2652005@gmail.com",
+            employee_id=user.id
+        )
+        followup_res = send_outreach_email(req=req_followup, db=db, current_user=user)
+        print("Second Email Response:", followup_res)
+
+        followup_email_log = db.query(Email).filter(Email.sender_id == user.id).order_by(Email.created_at.desc()).first()
+        print(f"Follow-up Log ID: {followup_email_log.id} | Status: {followup_email_log.status} | Provider: {followup_email_log.provider} | MessageId: {followup_email_log.provider_message_id}")
+        assert followup_email_log.status == "Sent", "Follow-up email log status is not 'Sent'!"
+        assert followup_email_log.provider_message_id, "Follow-up Brevo messageId missing!"
+        print("PASS: Second email / follow-up sent via Brevo HTTP API successfully!")
+
+        # 7. Invalid API Key Error Handling
+        print("\n--- TEST 7: Invalid API Key Error Handling ---")
         invalid_res = BrevoEmailService.verify_api_key(api_key="xkeysib-invalid-fake-api-key-12345")
         print("Invalid Key Result:", invalid_res)
         assert invalid_res["status"] == "failed", "Invalid API key test did not fail as expected!"
         print("PASS: Correctly rejected invalid Brevo API key!")
 
-        # 7. Disabled Employee / Unverified Sender Error Handling
-        print("\n--- TEST 7: Disabled Employee Error Handling ---")
+        # 8. Disabled Employee / Unverified Sender Error Handling
+        print("\n--- TEST 8: Disabled Employee Error Handling ---")
         user.is_active = False
         db.commit()
         try:
-            send_outreach_email(req=req, db=db, current_user=user)
+            send_outreach_email(req=req_first, db=db, current_user=user)
             print("ERROR: Expected exception for disabled employee, but call succeeded!")
             assert False, "Disabled employee check failed!"
         except Exception as e:
@@ -137,7 +155,7 @@ def run_brevo_test_suite():
             db.commit()
 
         print("\n" + "=" * 60)
-        print(" ALL 7 BREVO INTEGRATION TESTS PASSED WITH 100% SUCCESS!")
+        print(" ALL 8 BREVO INTEGRATION TESTS PASSED WITH 100% SUCCESS!")
         print("=" * 60)
 
     finally:

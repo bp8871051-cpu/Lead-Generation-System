@@ -186,13 +186,13 @@ try:
         bhaumik_acct = EmployeeEmailAccount(
             employee_id=bhaumik_user.id,
             email="bhaumik2652005@gmail.com",
-            provider="Gmail",
-            authentication_method="SMTP",
-            smtp_host="smtp.gmail.com",
-            smtp_port=587,
-            encryption="TLS",
+            provider="Brevo",
+            authentication_method="HTTP_API",
+            smtp_host="https://api.brevo.com/v3/smtp/email",
+            smtp_port=443,
+            encryption="SSL",
             smtp_username="bhaumik2652005@gmail.com",
-            encrypted_smtp_password=encrypt_credential("wlmr dypf gzru ztho"),
+            encrypted_smtp_password=encrypt_credential(settings.BREVO_API_KEY),
             sender_name="Bhaumik Prajapati",
             is_active=True,
             is_default=True
@@ -201,12 +201,13 @@ try:
         db.commit()
     else:
         bhaumik_acct.email = "bhaumik2652005@gmail.com"
-        bhaumik_acct.provider = "Gmail"
-        bhaumik_acct.smtp_host = "smtp.gmail.com"
-        bhaumik_acct.smtp_port = 587
-        bhaumik_acct.encryption = "TLS"
+        bhaumik_acct.provider = "Brevo"
+        bhaumik_acct.authentication_method = "HTTP_API"
+        bhaumik_acct.smtp_host = "https://api.brevo.com/v3/smtp/email"
+        bhaumik_acct.smtp_port = 443
+        bhaumik_acct.encryption = "SSL"
         bhaumik_acct.smtp_username = "bhaumik2652005@gmail.com"
-        bhaumik_acct.encrypted_smtp_password = encrypt_credential("wlmr dypf gzru ztho")
+        bhaumik_acct.encrypted_smtp_password = encrypt_credential(settings.BREVO_API_KEY)
         bhaumik_acct.sender_name = "Bhaumik Prajapati"
         bhaumik_acct.is_active = True
         db.commit()
@@ -239,13 +240,13 @@ try:
         sumedha_acct = EmployeeEmailAccount(
             employee_id=sumedha_user.id,
             email="sumedha.blueboxx@gmail.com",
-            provider="Gmail",
-            authentication_method="SMTP",
-            smtp_host="smtp.gmail.com",
-            smtp_port=587,
-            encryption="TLS",
+            provider="Brevo",
+            authentication_method="HTTP_API",
+            smtp_host="https://api.brevo.com/v3/smtp/email",
+            smtp_port=443,
+            encryption="SSL",
             smtp_username="sumedha.blueboxx@gmail.com",
-            encrypted_smtp_password=encrypt_credential("xuiwlrspywwrvzyy"),
+            encrypted_smtp_password=encrypt_credential(settings.BREVO_API_KEY),
             sender_name="Sumedha Agrawal",
             is_active=True,
             is_default=False
@@ -254,12 +255,13 @@ try:
         db.commit()
     else:
         sumedha_acct.email = "sumedha.blueboxx@gmail.com"
-        sumedha_acct.provider = "Gmail"
-        sumedha_acct.smtp_host = "smtp.gmail.com"
-        sumedha_acct.smtp_port = 587
-        sumedha_acct.encryption = "TLS"
+        sumedha_acct.provider = "Brevo"
+        sumedha_acct.authentication_method = "HTTP_API"
+        sumedha_acct.smtp_host = "https://api.brevo.com/v3/smtp/email"
+        sumedha_acct.smtp_port = 443
+        sumedha_acct.encryption = "SSL"
         sumedha_acct.smtp_username = "sumedha.blueboxx@gmail.com"
-        sumedha_acct.encrypted_smtp_password = encrypt_credential("xuiwlrspywwrvzyy")
+        sumedha_acct.encrypted_smtp_password = encrypt_credential(settings.BREVO_API_KEY)
         sumedha_acct.sender_name = "Sumedha Agrawal"
         sumedha_acct.is_active = True
         db.commit()

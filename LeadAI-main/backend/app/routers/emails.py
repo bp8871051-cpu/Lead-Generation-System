@@ -22,7 +22,7 @@ from app.schemas import (
 )
 from app.routers.auth import get_current_user
 from app.services import AILeadAnalyzerService
-from app.brevo_service import BrevoEmailService
+from app.brevo_service import BrevoEmailService, get_brevo_api_key
 from app.security_utils import encrypt_credential, decrypt_credential
 from app.config import settings
 
@@ -209,93 +209,14 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
         db.commit()
         return {"status": "failed", "error_code": error_code, "message": status_msg, "last_test_status": status_msg}
 
-    # HTTP API Handler Check
+    # Primary Production Check: Brevo HTTPS API Authentication
     key_clean = decrypted_pw.strip()
-    if key_clean.startswith("re_") or key_clean.startswith("xkeysib-") or (account.provider or "").upper() in ["RESEND", "BREVO"]:
-        res = test_http_email_api(account, key_clean)
+    brevo_key = get_brevo_api_key(key_clean if key_clean.startswith("xkeysib-") else None)
+    if brevo_key:
+        verify_res = BrevoEmailService.verify_api_key(brevo_key)
         account.last_tested_at = datetime.utcnow()
-        account.last_test_status = res.get("last_test_status", "Connection Failed")
-        db.commit()
-        return res
-
-    primary_port = account.smtp_port or (465 if (account.encryption or "").upper() == "SSL" else 587)
-    primary_enc = account.encryption or ("SSL" if primary_port == 465 else "TLS")
-
-    ports_to_try = [
-        (primary_port, primary_enc),
-        (465 if primary_port != 465 else 587, "SSL" if primary_port != 465 else "TLS"),
-        (2525, "TLS")
-    ]
-
-    last_error_code = "SMTP_CONNECTION_TIMEOUT"
-    last_error_msg = ""
-
-    pw_candidates = normalize_app_passwords(decrypted_pw)
-
-    for port, enc in ports_to_try:
-        logger.info(f"[SMTP TRY] Testing account={account.email}, host={account.smtp_host}, port={port}, encryption={enc}")
-        try:
-            for pw_cand in pw_candidates:
-                try:
-                    server = create_smtp_server(
-                        host=account.smtp_host,
-                        port=port,
-                        encryption=enc,
-                        timeout=10.0
-                    )
-                    server.login(account.smtp_username, pw_cand)
-                    server.quit()
-
-                    # Auto-save working password variant & port/encryption
-                    if pw_cand != decrypted_pw:
-                        account.encrypted_smtp_password = encrypt_credential(pw_cand)
-                    if port != account.smtp_port or enc != account.encryption:
-                        account.smtp_port = port
-                        account.encryption = enc
-
-                    status_msg = "Connected"
-                    logger.info(f"[SMTP SUCCESS] Authenticated account={account.email}, host={account.smtp_host}:{port} ({enc})")
-                    account.last_tested_at = datetime.utcnow()
-                    account.last_test_status = status_msg
-                    db.commit()
-                    return {
-                        "status": "success",
-                        "error_code": None,
-                        "message": f"Successfully authenticated with {account.smtp_host}:{port} ({enc})",
-                        "last_tested_at": account.last_tested_at.isoformat(),
-                        "last_test_status": status_msg
-                    }
-                except smtplib.SMTPAuthenticationError as e:
-                    last_error_code = "SMTP_AUTH_FAILED"
-                    last_error_msg = f"Invalid credentials or App Password required for user '{account.smtp_username}'"
-                    logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={last_error_msg}")
-                    continue
-        except (ssl.SSLError if 'ssl' in globals() else Exception) as e:
-            last_error_code = "SMTP_TLS_ERROR"
-            last_error_msg = f"TLS/SSL Handshake Error on {account.smtp_host}:{port} - {str(e)}"
-            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
-            if "timed out" in str(e).lower() or isinstance(e, socket.timeout):
-                last_error_code = "SMTP_CONNECTION_TIMEOUT"
-                last_error_msg = f"Connection timed out on {account.smtp_host}:{port}. Note: Cloud platforms (Render Free Tier) block outbound raw SMTP ports 587/465. Run backend locally or use HTTP Email API."
-            else:
-                last_error_code = "SMTP_HOST_UNREACHABLE"
-                last_error_msg = f"Host unreachable {account.smtp_host}:{port} - {str(e)}"
-            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
-        except Exception as e:
-            if "timed out" in str(e).lower() or isinstance(e, TimeoutError):
-                last_error_code = "SMTP_CONNECTION_TIMEOUT"
-                last_error_msg = f"Connection timed out on {account.smtp_host}:{port}. Note: Cloud platforms (Render Free Tier) block outbound raw SMTP ports 587/465. Run backend locally or use HTTP Email API."
-            else:
-                last_error_code = "SMTP_HOST_UNREACHABLE"
-                last_error_msg = str(e)
-            logger.error(f"[SMTP ERROR] error_code={last_error_code}, host={account.smtp_host}:{port}, details={str(e)}")
-
-    if last_error_code in ["SMTP_CONNECTION_TIMEOUT", "SMTP_HOST_UNREACHABLE"]:
-        brevo_check = BrevoEmailService.verify_api_key()
-        if brevo_check["status"] == "success":
+        if verify_res["status"] == "success":
             status_msg = "Connected"
-            logger.info(f"[SMTP FALLBACK BREVO SUCCESS] Account {account.email} verified via Brevo HTTPS API (Port 443)")
-            account.last_tested_at = datetime.utcnow()
             account.last_test_status = status_msg
             db.commit()
             return {
@@ -305,15 +226,33 @@ def test_smtp_connection_for_account(account: EmployeeEmailAccount, db: Session)
                 "last_tested_at": account.last_tested_at.isoformat(),
                 "last_test_status": status_msg
             }
+        else:
+            status_msg = verify_res.get("message", "Brevo API Key validation failed")
+            account.last_test_status = f"BREVO_AUTH_FAILED: {status_msg}"
+            db.commit()
+            return {
+                "status": "failed",
+                "error_code": "BREVO_AUTH_FAILED",
+                "message": status_msg,
+                "last_test_status": account.last_test_status
+            }
+
+    # Fallback HTTP API Handler (e.g. Resend)
+    if key_clean.startswith("re_") or (account.provider or "").upper() == "RESEND":
+        res = test_http_email_api(account, key_clean)
+        account.last_tested_at = datetime.utcnow()
+        account.last_test_status = res.get("last_test_status", "Connection Failed")
+        db.commit()
+        return res
 
     account.last_tested_at = datetime.utcnow()
-    account.last_test_status = f"{last_error_code}: {last_error_msg}"
+    account.last_test_status = "BREVO_KEY_MISSING: BREVO_API_KEY is not configured"
     db.commit()
     return {
         "status": "failed",
-        "error_code": last_error_code,
-        "message": last_error_msg,
-        "last_test_status": f"{last_error_code}: {last_error_msg}"
+        "error_code": "BREVO_KEY_MISSING",
+        "message": "BREVO_API_KEY is not configured.",
+        "last_test_status": account.last_test_status
     }
 
 
@@ -586,7 +525,8 @@ def send_outreach_email(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Sends an outreach email dynamically using the selected employee's authenticated email account.
+    Sends an outreach email dynamically using Brevo Transactional Email HTTP API (Port 443 HTTPS).
+    Replaces raw Gmail SMTP to ensure reliable cloud delivery on Render / AWS / Vercel.
     """
     lead = _resolve_lead(req.lead_id, db, current_user)
 
@@ -603,41 +543,24 @@ def send_outreach_email(
             detail=f"Selected employee (ID: {target_emp_id}) is inactive or does not exist."
         )
 
-    # Load Employee's Email Account
+    # Load Employee's Email Account or System Default Sender
     email_account = target_user.email_account
     
-    # Check if configured
-    if not email_account or not email_account.is_active or not email_account.smtp_host or not email_account.smtp_username:
-        # Fallback ONLY if current_user doesn't have an account and global .env is populated
-        if settings.SMTP_USER and settings.SMTP_PASS and not req.employee_id:
-            # Temporary fallback for unconfigured single admin user
-            sender_email = settings.EMAIL_FROM or settings.SMTP_USER
-            provider_name = "Global ENV SMTP"
-            smtp_host = settings.SMTP_HOST
-            smtp_port = settings.SMTP_PORT
-            smtp_user = settings.SMTP_USER
-            smtp_pass = settings.SMTP_PASS
-            encryption = "TLS"
-            sender_name = settings.DEFAULT_SENDER_NAME or target_user.full_name or "BLUEBOXX Team"
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"No verified sending email account is available for employee '{target_user.full_name or target_user.email}'. Configure an employee email account first."
-            )
+    if email_account and email_account.is_active:
+        sender_email = email_account.email or getattr(settings, "DEFAULT_SENDER_EMAIL", "sumedha.blueboxx@gmail.com")
+        sender_name = email_account.sender_name or target_user.full_name or getattr(settings, "DEFAULT_SENDER_NAME", "Sumedha Agrawal")
+        custom_key = decrypt_credential(email_account.encrypted_smtp_password or "")
     else:
-        sender_email = email_account.email
-        provider_name = email_account.provider or "Employee SMTP"
-        smtp_host = email_account.smtp_host
-        smtp_port = email_account.smtp_port or 587
-        smtp_user = email_account.smtp_username
-        smtp_pass = decrypt_credential(email_account.encrypted_smtp_password or "")
-        encryption = email_account.encryption or "TLS"
-        sender_name = email_account.sender_name or target_user.full_name or target_user.email
+        sender_email = getattr(settings, "DEFAULT_SENDER_EMAIL", "sumedha.blueboxx@gmail.com")
+        sender_name = target_user.full_name or getattr(settings, "DEFAULT_SENDER_NAME", "Sumedha Agrawal")
+        custom_key = None
 
-    if not smtp_pass:
+    # Resolve Brevo API Key
+    brevo_key = get_brevo_api_key(custom_key if (custom_key or "").startswith("xkeysib-") else None)
+    if not brevo_key:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid or missing password for employee account '{sender_email}'. Please test connection & re-enter password."
+            detail="BREVO_API_KEY is not configured. Please add BREVO_API_KEY in environment variables."
         )
 
     # Attach HTML footer signoff
@@ -646,139 +569,21 @@ def send_outreach_email(
         footer_html = generate_html_email_footer(target_user, company)
         final_body = f"{final_body}<br/>{footer_html}"
 
-    sent_successfully = False
-    last_smtp_error = ""
-    brevo_message_id = None
+    recipient_name = lead.business.name if (lead and lead.business and lead.business.name) else (req.recipient_email.split('@')[0] if '@' in req.recipient_email else "Valued Client")
 
+    # Primary Production Transmission: Brevo Transactional Email HTTP API over HTTPS (Port 443)
+    res = BrevoEmailService.send_transactional_email(
+        sender_name=sender_name,
+        sender_email=sender_email,
+        recipient_email=req.recipient_email,
+        subject=req.subject,
+        html_content=final_body,
+        custom_api_key=brevo_key
+    )
 
-    key_clean = smtp_pass.strip() if smtp_pass else ""
-
-    # 1. Primary Production Route: Brevo HTTPS API (Port 443)
-    if key_clean.startswith("xkeysib-") or provider_name.upper() == "BREVO":
-        res = BrevoEmailService.send_transactional_email(
-            sender_name=sender_name,
-            sender_email=sender_email,
-            recipient_email=req.recipient_email,
-            subject=req.subject,
-            html_content=final_body,
-            custom_api_key=key_clean if key_clean.startswith("xkeysib-") else None
-        )
-        if res["status"] == "success":
-            sent_successfully = True
-            brevo_message_id = res.get("message_id")
-            provider_name = "Brevo HTTPS API"
-        else:
-            last_smtp_error = res.get("error_message", "Brevo API delivery failed")
-
-    # 2. Resend HTTP API Route
-    elif key_clean.startswith("re_") or provider_name.upper() == "RESEND":
-        try:
-            req_data = json.dumps({
-                "from": f"{sender_name} <onboarding@resend.dev>",
-                "to": [req.recipient_email],
-                "subject": req.subject,
-                "html": final_body
-            }).encode('utf-8')
-            http_req = urllib.request.Request(
-                "https://api.resend.com/emails",
-                data=req_data,
-                headers={"Authorization": f"Bearer {key_clean}", "Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(http_req, timeout=12) as resp:
-                if resp.status in [200, 201]:
-                    res_j = json.loads(resp.read().decode('utf-8'))
-                    sent_successfully = True
-                    brevo_message_id = res_j.get("id")
-        except Exception as e:
-            last_smtp_error = f"Resend API Error: {str(e)}"
-
-    # 3. Direct SMTP Transmission (Gmail, Hostinger, Custom SMTP)
-    else:
-        primary_port = smtp_port or (465 if (encryption or "").upper() == "SSL" else 587)
-        primary_enc = encryption or ("SSL" if primary_port == 465 else "TLS")
-        ports_to_try = [
-            (primary_port, primary_enc),
-            (465 if primary_port != 465 else 587, "SSL" if primary_port != 465 else "TLS"),
-            (2525, "TLS")
-        ]
-
-        pw_candidates = normalize_app_passwords(smtp_pass)
-        is_timeout = False
-
-        for port, enc in ports_to_try:
-            if sent_successfully:
-                break
-            for pw_candidate in pw_candidates:
-                try:
-                    recipient_clean = req.recipient_email.strip()
-                    sender_clean = sender_email.strip()
-
-                    msg = MIMEMultipart('alternative')
-                    msg['From'] = email.utils.formataddr((sender_name, sender_clean))
-                    msg['To'] = recipient_clean
-                    msg['Reply-To'] = sender_clean
-                    msg['Subject'] = req.subject
-                    msg['Date'] = email.utils.formatdate(localtime=True)
-                    msg['Message-ID'] = email.utils.make_msgid(domain=sender_clean.split('@')[-1] if '@' in sender_clean else 'gmail.com')
-                    msg['MIME-Version'] = '1.0'
-
-                    plain_text = re.sub(r'<[^>]+>', '', final_body)
-                    plain_text = re.sub(r'\n\s*\n', '\n\n', plain_text).strip()
-
-                    msg.attach(MIMEText(plain_text, 'plain', 'utf-8'))
-                    msg.attach(MIMEText(final_body, 'html', 'utf-8'))
-
-                    server = create_smtp_server(smtp_host, port, encryption=enc, timeout=10.0)
-                    server.login(smtp_user, pw_candidate)
-                    refused = server.sendmail(sender_clean, [recipient_clean], msg.as_string())
-                    try:
-                        server.quit()
-                    except Exception:
-                        pass
-
-                    if refused:
-                        refused_details = "; ".join([f"{rcpt}: {code} {m.decode('utf-8', errors='ignore') if isinstance(m, bytes) else m}" for rcpt, (code, m) in refused.items()])
-                        logger.error(f"[SMTP REJECTED] Delivery refused for recipient(s): {refused_details}")
-                        last_smtp_error = f"Recipient delivery refused by SMTP server: {refused_details}"
-                        continue
-
-                    sent_successfully = True
-                    provider_name = f"SMTP ({smtp_host}:{port})"
-                    break
-                except smtplib.SMTPAuthenticationError:
-                    last_smtp_error = f"Authentication failed for user '{smtp_user}' on host '{smtp_host}'. If using Gmail, please verify your 16-character App Password."
-                    continue
-                except Exception as e:
-                    last_smtp_error = str(e)
-                    err_str = str(e).lower()
-                    if "timed out" in err_str or "unreachable" in err_str or "errno 101" in err_str or "refused" in err_str or isinstance(e, (socket.timeout, TimeoutError, socket.error, OSError)):
-                        is_timeout = True
-
-            if sent_successfully:
-                break
-
-        # Fallback to Brevo HTTPS API IF raw SMTP ports are blocked or unreachable (e.g. Render Free Tier / Live Cloud Hosts)
-        # ONLY fallback for custom company domain senders, NEVER for @gmail.com / @yahoo.com / @outlook.com
-        # because Brevo drops third-party webmail domain senders unless manually verified on Brevo.
-        if not sent_successfully and is_timeout:
-            sender_domain = (sender_email.split('@')[-1] if '@' in sender_email else "").lower()
-            if sender_domain not in ["gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"]:
-                brevo_key = getattr(settings, "BREVO_API_KEY", "") or os.getenv("BREVO_API_KEY", "")
-                if brevo_key.startswith("xkeysib-"):
-                    logger.info(f"[SMTP FALLBACK TO BREVO] Direct SMTP failed ({last_smtp_error}) on {smtp_host}. Falling back to Brevo HTTPS API for {sender_email}")
-                    res = BrevoEmailService.send_transactional_email(
-                        sender_name=sender_name,
-                        sender_email=sender_email,
-                        recipient_email=req.recipient_email,
-                        subject=req.subject,
-                        html_content=final_body,
-                        custom_api_key=brevo_key
-                    )
-                    if res["status"] == "success":
-                        sent_successfully = True
-                        brevo_message_id = res.get("message_id")
-                        provider_name = "Brevo HTTPS API (SMTP Fallback)"
-
+    sent_successfully = (res.get("status") == "success")
+    brevo_message_id = res.get("message_id")
+    error_msg = res.get("error_message") or res.get("message")
 
     default_campaign = db.query(Campaign).filter(Campaign.name == "Direct Outreach").first()
     if not default_campaign:
@@ -788,6 +593,7 @@ def send_outreach_email(
         db.refresh(default_campaign)
         
     email_status = "Sent" if sent_successfully else "Failed"
+    provider_name = "Brevo HTTPS API"
 
     new_email = Email(
         campaign_id=default_campaign.id,
@@ -796,15 +602,14 @@ def send_outreach_email(
         sender_email=sender_email,
         recipient_email=req.recipient_email,
         provider=provider_name,
-        error_message=last_smtp_error if not sent_successfully else None,
+        error_message=None if sent_successfully else error_msg,
         provider_message_id=brevo_message_id,
         generated_body=final_body,
         subject=req.subject,
         status=email_status,
-        sent_at=datetime.utcnow()
+        sent_at=datetime.utcnow() if sent_successfully else None
     )
     db.add(new_email)
-
 
     if sent_successfully:
         lead.status = "Contacted"
@@ -818,11 +623,18 @@ def send_outreach_email(
         return {
             "status": "success",
             "message": f"Email successfully sent from {sender_email} to {req.recipient_email}",
-            "sender_email": sender_email
+            "sender_email": sender_email,
+            "provider_message_id": brevo_message_id
         }
     else:
         db.commit()
+        clean_user_error = "Email could not be sent. Please check the email configuration."
+        if "missing or unconfigured" in (error_msg or "").lower():
+            clean_user_error = "BREVO_API_KEY is not configured."
+        elif error_msg:
+            clean_user_error = f"Brevo API delivery error: {error_msg}"
+
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to send email using account '{sender_email}' via {smtp_host}: {last_smtp_error or 'Connection timed out'}. Note: Live cloud hosting (Render/AWS/Vercel) blocks raw SMTP ports 587/465. Set BREVO_API_KEY in environment variables or select Brevo HTTP API for seamless Port 443 delivery."
+            detail=clean_user_error
         )

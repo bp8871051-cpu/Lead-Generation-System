@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     # Company Internal Settings (defaults)
     COMPANY_NAME: str = os.getenv("COMPANY_NAME", "Internal LeadAI Agency")
     COMPANY_EMAIL: str = os.getenv("COMPANY_EMAIL", "admin@company.internal")
-    DEFAULT_SENDER_NAME: str = os.getenv("DEFAULT_SENDER_NAME", "Lead Generation Team")
+    DEFAULT_SENDER_NAME: str = os.getenv("DEFAULT_SENDER_NAME", "Sumedha Agrawal")
+    DEFAULT_SENDER_EMAIL: str = os.getenv("DEFAULT_SENDER_EMAIL", "sumedha.blueboxx@gmail.com")
 
     class Config:
         case_sensitive = True

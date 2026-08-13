@@ -87,9 +87,10 @@ class BrevoEmailService:
         if not key:
             return {"status": "failed", "error_message": "Brevo API Key is missing or unconfigured."}
 
-        sender_email = (sender_email or "").strip()
+        sender_email = (sender_email or getattr(settings, "DEFAULT_SENDER_EMAIL", "sumedha.blueboxx@gmail.com")).strip()
+        sender_name = (sender_name or getattr(settings, "DEFAULT_SENDER_NAME", "Sumedha Agrawal")).strip()
         recipient_email = (recipient_email or "").strip()
-        sender_name = (sender_name or "BLUEBOXX Team").strip()
+        recipient_name = (recipient_name or recipient_email.split('@')[0] if '@' in recipient_email else "Valued Client").strip()
 
         payload = {
             "sender": {
@@ -99,7 +100,7 @@ class BrevoEmailService:
             "to": [
                 {
                     "email": recipient_email,
-                    "name": recipient_email.split('@')[0]
+                    "name": recipient_name
                 }
             ],
             "subject": subject,
@@ -117,7 +118,7 @@ class BrevoEmailService:
             }
         )
 
-        logger.info(f"[BREVO SEND ATTEMPT] Sender={sender_email}, Recipient={recipient_email}, Subject='{subject}'")
+        logger.info(f"[BREVO SEND ATTEMPT] Sender={sender_name} <{sender_email}>, Recipient={recipient_name} <{recipient_email}>, Subject='{subject}'")
 
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:
