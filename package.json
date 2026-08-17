@@ -1,0 +1,10 @@
+{
+  "name": "leadai-platform-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix LeadAI-main/frontend",
+    "build": "npm run build --prefix LeadAI-main/frontend",
+    "install": "npm install --prefix LeadAI-main/frontend"
+  }
+}
