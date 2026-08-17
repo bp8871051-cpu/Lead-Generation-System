@@ -1,10 +1,15 @@
 {
-  "name": "leadai-platform-root",
+  "name": "lead-generation-system",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "npm run dev --prefix LeadAI-main/frontend",
     "build": "npm run build --prefix LeadAI-main/frontend",
-    "install": "npm install --prefix LeadAI-main/frontend"
+    "start": "npm run preview --prefix LeadAI-main/frontend"
+  },
+  "dependencies": {
+    "next": "^15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

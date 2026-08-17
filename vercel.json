@@ -1,5 +1,4 @@
 {
-  "framework": "vite",
   "buildCommand": "npm run build --prefix LeadAI-main/frontend",
   "outputDirectory": "LeadAI-main/frontend/dist",
   "installCommand": "npm install --prefix LeadAI-main/frontend",
