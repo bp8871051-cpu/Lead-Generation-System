@@ -1,0 +1,20 @@
+# Node & Build
+**/node_modules/
+**/dist/
+**/.next/
+
+# PHP & Laravel
+**/vendor/
+**/.env
+**/.env.*
+**/storage/logs/*
+**/storage/framework/cache/*
+**/storage/framework/sessions/*
+**/storage/framework/views/*
+**/bootstrap/cache/*
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
